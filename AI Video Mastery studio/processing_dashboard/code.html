@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-dim": "#7e51ff",
+                        "on-secondary-container": "#e8fbff",
+                        "primary": "#b6a0ff",
+                        "tertiary-fixed": "#ff8fa9",
+                        "surface-container": "#161a21",
+                        "on-primary-fixed": "#000000",
+                        "on-tertiary-fixed": "#380014",
+                        "surface-container-lowest": "#000000",
+                        "secondary-fixed": "#26e6ff",
+                        "tertiary": "#ff6c95",
+                        "primary-container": "#a98fff",
+                        "secondary-container": "#006875",
+                        "on-error": "#490013",
+                        "on-surface": "#ecedf6",
+                        "on-primary-fixed-variant": "#32008a",
+                        "on-tertiary-container": "#100003",
+                        "outline": "#73757d",
+                        "on-primary": "#340090",
+                        "tertiary-dim": "#ff6c95",
+                        "secondary": "#00e3fd",
+                        "inverse-primary": "#6834eb",
+                        "secondary-dim": "#00d4ec",
+                        "on-secondary-fixed-variant": "#005964",
+                        "on-error-container": "#ffb2b9",
+                        "tertiary-fixed-dim": "#ff769b",
+                        "surface-container-high": "#1c2028",
+                        "surface-variant": "#22262f",
+                        "surface": "#0b0e14",
+                        "tertiary-container": "#fd3e80",
+                        "on-tertiary-fixed-variant": "#770033",
+                        "on-secondary-fixed": "#003a42",
+                        "on-surface-variant": "#a9abb3",
+                        "on-secondary": "#004d57",
+                        "surface-container-low": "#10131a",
+                        "surface-tint": "#b6a0ff",
+                        "surface-container-highest": "#22262f",
+                        "surface-bright": "#282c36",
+                        "error-container": "#a70138",
+                        "error-dim": "#d73357",
+                        "background": "#0b0e14",
+                        "on-background": "#ecedf6",
+                        "primary-fixed": "#a98fff",
+                        "surface-dim": "#0b0e14",
+                        "inverse-surface": "#f9f9ff",
+                        "inverse-on-surface": "#52555c",
+                        "error": "#ff6e84",
+                        "on-primary-container": "#280072",
+                        "outline-variant": "#45484f",
+                        "on-tertiary": "#48001c",
+                        "secondary-fixed-dim": "#00d7f0",
+                        "primary-fixed-dim": "#9c7eff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #0b0e14; color: #ecedf6; }
+        .headline { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel { background: rgba(34, 38, 47, 0.4); backdrop-filter: blur(12px); }
+    </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full flex justify-between items-center px-8 h-16 bg-slate-950/40 backdrop-blur-xl docked full-width z-50 no-border bg-slate-900/50 shadow-[0_8px_32px_rgba(0,0,0,0.5)] font-['Space_Grotesk'] tracking-tight">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Obsidian Lens</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-cyan-400 border-b-2 border-cyan-400 pb-1" href="#">Studio</a>
+<a class="text-slate-400 hover:text-slate-200 transition-colors duration-300" href="#">Library</a>
+<a class="text-slate-400 hover:text-slate-200 transition-colors duration-300" href="#">Assets</a>
+<a class="text-slate-400 hover:text-slate-200 transition-colors duration-300" href="#">Account</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-gradient-to-r from-primary to-primary-dim text-on-primary-fixed px-5 py-1.5 rounded-xl font-medium scale-95 active:scale-90 transition-transform">Create New</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/30">
+<img class="w-full h-full object-cover" data-alt="close-up portrait of a professional male user with friendly expression and modern lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEpBrKdnCmBT6DbHJGsmyx-mNBa_NvyjVESvsr8WOp5wauR3VTUWe9ahO9C0twfHnuBSF1NnCp8U2dAEhGTg6emnGNflgKtvn4ADqjH3IKYQoy3TjqeEoqo6hTFdVIzuOdhns0mU_pxLLk4Tf0N26wxcvJ4dTQPCfc7__b3ZkBwxqDlerO1vKYnn73bsCAtH6kLoKFzeqM8-bSXWn4nZAIqBD_9x_uzFgeW3DBoB9twf0YNsqZBElQF5mbCmmkqGeius7arL3Q4QQ"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-900 docked left-0 h-screen w-64 no-line bg-slate-950 z-40 pt-20">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-primary-dim flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-on-surface leading-none">Core Engine</h3>
+<p class="text-[10px] text-slate-500 font-medium">V2.5 Obsidian</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-2 font-['Inter'] text-sm font-medium">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-violet-500/20 to-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400 ease-in-out duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="magic_button">magic_button</span>
+<span>Create</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="hourglass_empty">hourglass_empty</span>
+<span>Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="movie">movie</span>
+<span>Cinema</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="auto_awesome_motion">auto_awesome_motion</span>
+<span>Vault</span>
+</a>
+</nav>
+<div class="px-4 mt-auto space-y-2 font-['Inter'] text-sm font-medium">
+<div class="p-4 rounded-xl bg-surface-container-high mb-4">
+<p class="text-xs text-on-surface-variant mb-2">Powering your imagination</p>
+<button class="w-full py-2 bg-secondary text-on-secondary rounded-lg text-xs font-bold hover:brightness-110 transition-all">Upgrade to Pro</button>
+</div>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-300 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-300 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-64 pt-24 px-10 pb-12 min-h-screen">
+<div class="max-w-6xl mx-auto">
+<!-- Header Section -->
+<div class="mb-12">
+<h1 class="headline text-4xl font-extrabold tracking-tight mb-2">Rendering Your Vision</h1>
+<p class="text-on-surface-variant max-w-xl">Our neural engines are weaving your prompt into a cinematic masterpiece. This usually takes 60-90 seconds.</p>
+</div>
+<!-- Dashboard Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Left: Progress Timeline -->
+<div class="lg:col-span-7 bg-surface-container rounded-3xl p-8 border border-outline-variant/10">
+<div class="flex items-center justify-between mb-10">
+<h2 class="headline text-xl font-bold">System Workflow</h2>
+<div class="flex items-center gap-2 px-3 py-1 bg-secondary/10 rounded-full border border-secondary/20">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="text-[10px] font-bold text-secondary tracking-widest uppercase">Live Engine Status</span>
+</div>
+</div>
+<div class="relative space-y-12">
+<!-- Connector Line -->
+<div class="absolute left-[19px] top-4 bottom-4 w-[2px] bg-outline-variant/20"></div>
+<!-- Step 1: Complete -->
+<div class="relative flex items-start gap-6 group">
+<div class="relative z-10 w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-[0_0_20px_rgba(182,160,255,0.4)]">
+<span class="material-symbols-outlined text-lg" data-icon="check">check</span>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<h3 class="font-bold text-on-surface">Drafting conversational script...</h3>
+<span class="text-xs text-primary font-medium">Completed</span>
+</div>
+<p class="text-sm text-on-surface-variant mt-1">NLP modules have finalized the semantic flow and tone mapping.</p>
+</div>
+</div>
+<!-- Step 2: In Progress -->
+<div class="relative flex items-start gap-6 group">
+<div class="relative z-10 w-10 h-10 rounded-full bg-surface-container-highest border-2 border-secondary flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined animate-spin text-lg" data-icon="refresh">refresh</span>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<h3 class="font-bold text-on-surface">Synthesizing lifelike voice...</h3>
+<span class="text-xs text-secondary font-bold">42% Progress</span>
+</div>
+<div class="w-full h-1 bg-surface-container-low rounded-full mt-3 overflow-hidden">
+<div class="h-full bg-secondary w-[42%]"></div>
+</div>
+<p class="text-sm text-on-surface-variant mt-2 italic">Generating neural phonetic textures for emotive resonance...</p>
+</div>
+</div>
+<!-- Step 3: Pending -->
+<div class="relative flex items-start gap-6 opacity-40">
+<div class="relative z-10 w-10 h-10 rounded-full bg-surface-container-highest border-2 border-outline-variant/30 flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="pending">pending</span>
+</div>
+<div class="flex-1">
+<h3 class="font-bold text-on-surface">Rendering avatar animations...</h3>
+<p class="text-sm text-on-surface-variant mt-1">Waiting for audio track completion to begin lip-syncing.</p>
+</div>
+</div>
+<!-- Step 4: Pending -->
+<div class="relative flex items-start gap-6 opacity-40">
+<div class="relative z-10 w-10 h-10 rounded-full bg-surface-container-highest border-2 border-outline-variant/30 flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="cloud_upload">cloud_upload</span>
+</div>
+<div class="flex-1">
+<h3 class="font-bold text-on-surface">Stitching video in the cloud...</h3>
+<p class="text-sm text-on-surface-variant mt-1">Final assembly of all layers into the Obsidian codec.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Right: Content & Trivia -->
+<div class="lg:col-span-5 space-y-8">
+<!-- Preview Card (Glassmorphism) -->
+<div class="glass-panel rounded-3xl overflow-hidden border border-outline-variant/10 shadow-2xl">
+<div class="relative h-64 bg-surface-container-low flex items-center justify-center">
+<img class="absolute inset-0 w-full h-full object-cover opacity-60" data-alt="abstract digital art with fluid glowing purple and blue shapes representing AI data processing" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8nvTh0sjLRgklssTUXFpesYkv8g81sg-XpvWwTNWaybFQWFwbPBg4O6Ot2oXA6dYAxLcZzSS2xJH5XUBEV5XIMbsNe_1CDj0upkJ0LkFQhQoeKrp8KgRe89Gsh6Op_Ggfk5XCIDithjmAfhDumsXnca6PjYGMTuUMTvn3NF5vNaXHvEPSBJmqkXcXmoHm54DHphZ92TKEj0axztS1OP-gxvko93tDsOg8hOT2R8pDzMInbqhilzeWnP9rY5lXM2To2I-ODLQRrlA"/>
+<div class="z-10 text-center px-6">
+<div class="w-16 h-16 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center mx-auto mb-4 border border-white/10">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="play_circle">play_circle</span>
+</div>
+<p class="text-sm font-medium tracking-wide">Live Stream Previewing Soon</p>
+</div>
+</div>
+<div class="p-6">
+<div class="flex items-center gap-2 mb-2">
+<span class="text-[10px] bg-tertiary/20 text-tertiary px-2 py-0.5 rounded uppercase font-bold tracking-tighter">New Asset</span>
+<span class="text-[10px] bg-outline-variant/20 text-on-surface-variant px-2 py-0.5 rounded uppercase font-bold tracking-tighter">4K Rendering</span>
+</div>
+<h4 class="font-bold text-lg">Project: Neon Cybernetics</h4>
+<p class="text-xs text-on-surface-variant mt-1">Status: Frame Synthesis Active</p>
+</div>
+</div>
+<!-- Fun Fact Carousel -->
+<div class="bg-surface-container-high rounded-3xl p-8 border border-outline-variant/10 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl" data-icon="lightbulb">lightbulb</span>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-3 mb-4">
+<span class="material-symbols-outlined text-tertiary" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">AI Logic Trivia</span>
+</div>
+<div class="min-h-[100px]">
+<h5 class="headline text-xl font-medium mb-3">Did you know?</h5>
+<p class="text-on-surface-variant leading-relaxed">
+                                    Our engine uses <span class="text-secondary">Temporal Coherence</span> to ensure your characters look identical across every frame, preventing the "flicker" common in early AI video models.
+                                </p>
+</div>
+<div class="flex gap-2 mt-6">
+<div class="w-8 h-1 bg-secondary rounded-full"></div>
+<div class="w-2 h-1 bg-outline-variant rounded-full"></div>
+<div class="w-2 h-1 bg-outline-variant rounded-full"></div>
+</div>
+</div>
+</div>
+<!-- CTA / Action -->
+<div class="flex items-center justify-between p-6 bg-primary/5 rounded-2xl border border-primary/10">
+<div>
+<p class="text-sm font-bold text-primary">Need it faster?</p>
+<p class="text-[10px] text-on-surface-variant">Priority render queue available.</p>
+</div>
+<button class="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-colors">
+                            Upgrade Queue
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

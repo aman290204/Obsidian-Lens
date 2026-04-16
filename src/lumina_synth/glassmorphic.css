@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Glassmorphic Theme for Obsidian Lens */
+:root {
+  --glass-bg: rgba(24, 24, 36, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 12px;
+  --glass-reflection: rgba(255, 255, 255, 0.05);
+
+  --primary-gradient-start: #2563eb;
+  --primary-gradient-end: #1d4ed8;
+
+  --text-light: #f8fafc;
+  --text-medium: #cbd5e1;
+  --text-dark: #475569;
+
+  --success-bg: rgba(22, 163, 74, 0.2);
+  --success-border: rgba(22, 163, 74, 0.3);
+  --error-bg: rgba(220, 38, 38, 0.2);
+  --error-border: rgba(220, 38, 38, 0.3);
+}
+
+@layer base {
+  @font-face {
+    font-family: 'Inter';
+    src: url('/fonts/Inter.var.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+  }
+
+  html {
+    background: #080808;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(40, 40, 60, 0.3) 0%, transparent 30%),
+      radial-gradient(circle at 80% 80%, rgba(60, 40, 60, 0.3) 0%, transparent 30%);
+    color: var(--text-light);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: 0.75rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .glass-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: linear-gradient(to bottom, var(--glass-reflection), transparent);
+    opacity: 0.5;
+  }
+
+  .glass-card-small {
+    @apply glass-card;
+    border-radius: 0.5rem;
+  }
+
+  .glass-card-inner {
+    background: rgba(30, 30, 46, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+  }
+
+  .floating-container {
+    animation: float 6s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(to right, var(--primary-gradient-start), var(--primary-gradient-end));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .ring-focus {
+    --tw-ring-color: rgba(37, 99, 235, 0.5) !important;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}

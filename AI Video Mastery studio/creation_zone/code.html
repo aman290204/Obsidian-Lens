@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space_Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-dim": "#7e51ff",
+                    "on-secondary-container": "#e8fbff",
+                    "primary": "#b6a0ff",
+                    "tertiary-fixed": "#ff8fa9",
+                    "surface-container": "#161a21",
+                    "on-primary-fixed": "#000000",
+                    "on-tertiary-fixed": "#380014",
+                    "surface-container-lowest": "#000000",
+                    "secondary-fixed": "#26e6ff",
+                    "tertiary": "#ff6c95",
+                    "primary-container": "#a98fff",
+                    "secondary-container": "#006875",
+                    "on-error": "#490013",
+                    "on-surface": "#ecedf6",
+                    "on-primary-fixed-variant": "#32008a",
+                    "on-tertiary-container": "#100003",
+                    "outline": "#73757d",
+                    "on-primary": "#340090",
+                    "tertiary-dim": "#ff6c95",
+                    "secondary": "#00e3fd",
+                    "inverse-primary": "#6834eb",
+                    "secondary-dim": "#00d4ec",
+                    "on-secondary-fixed-variant": "#005964",
+                    "on-error-container": "#ffb2b9",
+                    "tertiary-fixed-dim": "#ff769b",
+                    "surface-container-high": "#1c2028",
+                    "surface-variant": "#22262f",
+                    "surface": "#0b0e14",
+                    "tertiary-container": "#fd3e80",
+                    "on-tertiary-fixed-variant": "#770033",
+                    "on-secondary-fixed": "#003a42",
+                    "on-surface-variant": "#a9abb3",
+                    "on-secondary": "#004d57",
+                    "surface-container-low": "#10131a",
+                    "surface-tint": "#b6a0ff",
+                    "surface-container-highest": "#22262f",
+                    "surface-bright": "#282c36",
+                    "error-container": "#a70138",
+                    "error-dim": "#d73357",
+                    "background": "#0b0e14",
+                    "on-background": "#ecedf6",
+                    "primary-fixed": "#a98fff",
+                    "surface-dim": "#0b0e14",
+                    "inverse-surface": "#f9f9ff",
+                    "inverse-on-surface": "#52555c",
+                    "error": "#ff6e84",
+                    "on-primary-container": "#280072",
+                    "outline-variant": "#45484f",
+                    "on-tertiary": "#48001c",
+                    "secondary-fixed-dim": "#00d7f0",
+                    "primary-fixed-dim": "#9c7eff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(34, 38, 47, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full flex justify-between items-center px-8 h-16 bg-slate-950/40 backdrop-blur-xl z-50 shadow-[0_8px_32px_rgba(0,0,0,0.5)] font-['Space_Grotesk'] tracking-tight">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Obsidian Lens</span>
+<div class="hidden md:flex gap-6">
+<a class="text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors duration-300" href="#">Studio</a>
+<a class="text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors duration-300" href="#">Library</a>
+<a class="text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors duration-300" href="#">Assets</a>
+<a class="text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors duration-300" href="#">Account</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="px-4 py-1.5 rounded-lg bg-violet-400 text-slate-950 font-bold scale-95 active:scale-90 transition-transform">Create New</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img alt="User profile" data-alt="close-up portrait of a professional digital artist with short dark hair and stylish glasses in front of a neon workstation" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7Gl5RkPzl84pzx0CRDItR3OiQU5ofrLx1YrIjuiXKGdVkTDHTffkvAG6oK4Jj-guBodjxgTNhT8ylipuj7v5SoeQUSx24Cv-V0-paFvevhkRNYtga_MM7QQVOd_wbi-Qsd3a7GPtdm7TqiDSvfH4D4KRiSNSetXiJFXp802ohvB-tpt9G7mEQb3lk6IW7XjQnWSWxz8HgVc8PqO6Ko2z37S-g6IHINMXlA2GjwQLQgjqF4IEWpHmfNVMwe7QN_5yzvuOnXZWoPfQ"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-900 w-64 z-40 font-['Inter'] text-sm font-medium">
+<div class="mt-16 px-6 mb-8">
+<div class="flex items-center gap-3 p-3 bg-slate-950 rounded-xl">
+<div class="w-10 h-10 rounded-lg bg-primary-dim flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div>
+<p class="text-on-surface font-bold">Core Engine</p>
+<p class="text-xs text-slate-500">V2.5 Obsidian</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-2">
+<!-- Active State Logic: Creating Zone maps to 'Create' -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-gradient-to-r from-violet-500/20 to-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="magic_button">magic_button</span>
+<span>Create</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="hourglass_empty">hourglass_empty</span>
+<span>Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="movie">movie</span>
+<span>Cinema</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="auto_awesome_motion">auto_awesome_motion</span>
+<span>Vault</span>
+</a>
+</nav>
+<div class="px-4 mt-auto space-y-2">
+<button class="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-secondary text-on-primary-fixed font-bold mb-4">Upgrade to Pro</button>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-300" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-300" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content: Creation Zone -->
+<main class="ml-64 pt-24 pb-12 px-8 min-h-screen relative overflow-hidden">
+<!-- Tech-focused background elements -->
+<div class="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-primary/10 blur-[120px] rounded-full pointer-events-none"></div>
+<div class="absolute bottom-[0%] left-[10%] w-[400px] h-[400px] bg-secondary/5 blur-[100px] rounded-full pointer-events-none"></div>
+<div class="max-w-4xl mx-auto relative z-10">
+<header class="mb-12">
+<h1 class="text-5xl font-headline font-bold tracking-tighter mb-4 text-on-surface">Creation Zone</h1>
+<p class="text-on-surface-variant text-lg">Synthesize cinematic knowledge from a single prompt.</p>
+</header>
+<!-- Centerpiece: Glassmorphic Card -->
+<div class="glass-panel rounded-3xl p-8 border border-outline-variant/10 shadow-2xl">
+<!-- Main Prompt Bar -->
+<div class="mb-10">
+<label class="block text-sm font-medium text-primary mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+                        AI DIRECTIVE
+                    </label>
+<textarea class="w-full bg-surface-container-low/50 rounded-2xl p-6 text-xl text-on-surface placeholder:text-on-surface-variant/40 border-none focus:ring-2 focus:ring-primary/40 focus:bg-surface-variant transition-all resize-none font-medium leading-relaxed" placeholder='What topic do you want to master today? Try "How the stock market works"...' rows="3"></textarea>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-10 mb-10">
+<!-- Language Selector -->
+<div>
+<label class="block text-sm font-medium text-on-surface-variant mb-4">LANGUAGE RENDERING</label>
+<div class="relative group">
+<select class="w-full bg-surface-container-low rounded-xl px-4 py-3.5 appearance-none border-none focus:ring-2 focus:ring-secondary/40 text-on-surface font-medium cursor-pointer">
+<option>Hinglish (Default)</option>
+<option>Conversational Marathi</option>
+<option>Simple English</option>
+<option>Hindi (Formal)</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-3.5 text-on-surface-variant pointer-events-none group-hover:text-secondary transition-colors">expand_more</span>
+</div>
+</div>
+<!-- Duration Slider -->
+<div>
+<div class="flex justify-between items-center mb-4">
+<label class="block text-sm font-medium text-on-surface-variant uppercase tracking-wider">Duration</label>
+<span class="text-secondary font-bold font-headline">15m <span class="text-xs font-normal opacity-60">EST.</span></span>
+</div>
+<div class="relative pt-2 pb-6">
+<input class="w-full h-1.5 bg-surface-container-highest rounded-full appearance-none cursor-pointer accent-secondary" max="60" min="5" type="range" value="15"/>
+<div class="flex justify-between mt-4 px-1">
+<div class="flex flex-col items-center">
+<div class="h-2 w-0.5 bg-outline-variant mb-1"></div>
+<span class="text-[10px] text-on-surface-variant">5m</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="h-2 w-0.5 bg-outline-variant mb-1"></div>
+<span class="text-[10px] text-on-surface-variant">10m</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="h-3 w-0.5 bg-secondary mb-1"></div>
+<span class="text-[10px] text-secondary font-bold">15m</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="h-2 w-0.5 bg-outline-variant mb-1"></div>
+<span class="text-[10px] text-on-surface-variant">30m</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="h-2 w-0.5 bg-outline-variant mb-1"></div>
+<span class="text-[10px] text-on-surface-variant">60m</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Avatar Picker (Horizontal Carousel) -->
+<div class="mb-12">
+<label class="block text-sm font-medium text-on-surface-variant mb-6 uppercase tracking-wider">NVIDIA Audio2Face Persona</label>
+<div class="flex gap-6 overflow-x-auto no-scrollbar pb-4 -mx-2 px-2 scroll-smooth">
+<!-- Avatar Items -->
+<div class="flex-none group">
+<div class="relative w-24 h-24 rounded-full p-1 border-2 border-secondary bg-surface-container-highest transition-all group-hover:scale-105 cursor-pointer">
+<img class="w-full h-full rounded-full bg-slate-800" data-alt="Hyper-realistic 3D render of a futuristic male digital human with high skin detail and professional studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUIOCyc-nRtTik0Uv3SFJY4WDGSplgyV9gAN3KxWOHCmwrbPW16He2k2g5_pGBSCMhfp8aTKBcoWXPJRwMqkqPr3euIQVUSdPxxS4d6MyWUzuMDgfermLSnvs4OyRPlfGNYOyd9sRswobkJuuZ7x2BTd-XDPUjAOCnOGPOCrE67Z8JE_lS2Tyy_MFDVYJJhU0mNu1fJUm-ayYZKpS7BVMEBLO9iQuGLJi2W2jztlBGkNP8fbgPJxlgs46GzCeJJFlrzvkHU5zd4Wk"/>
+<div class="absolute inset-0 bg-secondary/20 rounded-full flex items-center justify-center opacity-100">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<p class="text-center text-xs mt-3 text-secondary font-bold">Ethan (Pro)</p>
+</div>
+<div class="flex-none group">
+<div class="relative w-24 h-24 rounded-full p-1 border-2 border-transparent bg-surface-container-highest transition-all group-hover:border-primary group-hover:scale-105 cursor-pointer">
+<img class="w-full h-full rounded-full bg-slate-800" data-alt="Photorealistic female avatar with warm studio lighting and intricate texture details suitable for cinematic video" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByIGvMypSWljeKLtwxt5yby0jnT6ZlWp8nkIYjhg99xCvI-beZ5V5nmZ7duqaEUHEizp_6uVaJ_pP2CAIdyxfwdFjoO0B6BXYXo-tJRCMcDeRC-mRPyCzWxNV3LFDV1Ea08dq_4JxbI-OzVP5oM1yTunlGhT3G4Cy5g4ci4kgV8qo6muRnJaYHF6qIsiI4CQQkh-KA5I3Nx2t5gcIVQXszMhmflSO9tlN9aC5t3f5RXc2DHBHwz0TFhGBvSGVhPZtRDKO0RAeAo30"/>
+</div>
+<p class="text-center text-xs mt-3 text-on-surface-variant group-hover:text-on-surface">Maya</p>
+</div>
+<div class="flex-none group">
+<div class="relative w-24 h-24 rounded-full p-1 border-2 border-transparent bg-surface-container-highest transition-all group-hover:border-primary group-hover:scale-105 cursor-pointer">
+<img class="w-full h-full rounded-full bg-slate-800" data-alt="Professional male digital host avatar with a neutral expression and high-definition facial features" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2MjIDderaSePKF6egT0Od_ZYlIfYztxcmyc7fwB1UTd1Ak0Mr56fq5O6JOWtkcwRjSLYgQYtWyI0ty9LJHnaTR-sdLDbNcGschGXSZV3SB0mcjqCmINYyH0wJsRLZhDb1HGIGZrnsKl9vFVfwTNBEwjQRhUMoym7S36daXsWfVLscUh60jiJeIYPXzn2i4UPB_OlUX4Z4xR7gkco84aP63gn1_r6QFj6PyrtAcHM5Wl_9mWZFjVJ1Rru-o5q1K5Ny20ZMNYZ0hk0"/>
+</div>
+<p class="text-center text-xs mt-3 text-on-surface-variant group-hover:text-on-surface">Kenji</p>
+</div>
+<div class="flex-none group">
+<div class="relative w-24 h-24 rounded-full p-1 border-2 border-transparent bg-surface-container-highest transition-all group-hover:border-primary group-hover:scale-105 cursor-pointer">
+<img class="w-full h-full rounded-full bg-slate-800" data-alt="Sleek female digital human avatar with cinematic lighting and a confident friendly expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgddWk90yUaHUhRNLX_R9jzla3Ec1Coq5B9Hq2mfHPdpiM-2sW9ORfowUWkMNpiXK7rG7C-wLmHH5PuhIfJZtJqQSDeBkea9TKzwXb0ZnoyYBJWSWMt8WTpkHJ_6ZyiLz97sxQl5eJTTDTz1cAZdVvQnR8LkWAksgvezzjQ_tOb5zZFV-jJemVCbAMXng43sILLsngFs_vIIaQpfE_9Aq-NsX6M9Y7oAlH3OmDm0uXid7uz3uyF1fOnph5G9vJrjVls0KpaspSkpE"/>
+</div>
+<p class="text-center text-xs mt-3 text-on-surface-variant group-hover:text-on-surface">Clara</p>
+</div>
+<div class="flex-none group opacity-50">
+<div class="relative w-24 h-24 rounded-full p-1 border-2 border-transparent bg-surface-container-highest transition-all group-hover:border-primary group-hover:scale-105 cursor-pointer flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl text-on-surface-variant">add</span>
+</div>
+<p class="text-center text-xs mt-3 text-on-surface-variant">Custom</p>
+</div>
+</div>
+</div>
+<!-- Generate CTA -->
+<button class="w-full py-6 rounded-2xl bg-gradient-to-r from-primary to-secondary text-on-primary-fixed font-headline font-bold text-2xl tracking-tight shadow-[0_0_40px_rgba(0,227,253,0.3)] hover:shadow-[0_0_60px_rgba(0,227,253,0.5)] transition-all active:scale-[0.98] flex items-center justify-center gap-4 group">
+<span class="material-symbols-outlined text-3xl group-hover:rotate-12 transition-transform">bolt</span>
+                    INITIATE SYNTHESIS
+                    <span class="material-symbols-outlined text-3xl opacity-50">arrow_forward</span>
+</button>
+</div>
+<!-- Asymmetric Helper Cards (Below Centerpiece) -->
+<div class="grid grid-cols-12 gap-6 mt-12">
+<div class="col-span-12 md:col-span-7 surface-container-high rounded-2xl p-6 border border-outline-variant/10 flex gap-5 items-start">
+<div class="p-3 bg-tertiary-container/20 rounded-xl">
+<span class="material-symbols-outlined text-tertiary">tips_and_updates</span>
+</div>
+<div>
+<h4 class="font-bold mb-2">Pro Tip: Granular Details</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">The engine performs 40% better when you specify the 'Tone' (e.g. "Explain like a skeptical economist").</p>
+</div>
+</div>
+<div class="col-span-12 md:col-span-5 bg-gradient-to-br from-surface-container-high to-surface-container-low rounded-2xl p-6 border border-outline-variant/10">
+<div class="flex justify-between items-center mb-4">
+<span class="text-xs font-bold text-primary tracking-widest uppercase">System Load</span>
+<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+</div>
+<div class="space-y-3">
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[35%]"></div>
+</div>
+<p class="text-xs text-on-surface-variant font-medium">GPU Utilization: Optimal (35%)</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Visual Floating Element (Optional Decoration) -->
+<div class="fixed bottom-10 right-10 z-0 opacity-20 pointer-events-none select-none">
+<h2 class="font-headline font-bold text-8xl text-outline-variant/20 -rotate-90 origin-bottom-right">SYNTHESIS</h2>
+</div>
+</body></html>

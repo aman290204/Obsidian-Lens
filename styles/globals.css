@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Obsidian Lens – Material Design 3 Dark Palette ─────────────────── */
+:root {
+  --color-background:               #030712;
+  --color-on-background:            #e2e0e8;
+  --color-surface:                  #0d0f1a;
+  --color-on-surface:               #e2e0e8;
+  --color-surface-variant:          #1e1b2e;
+  --color-on-surface-variant:       #cac4d0;
+  --color-surface-container:        #131520;
+  --color-surface-container-low:    #0d0f1a;
+  --color-surface-container-high:   #1a1c2b;
+  --color-surface-container-highest:#232538;
+  --color-surface-bright:           #2e3045;
+
+  --color-primary:                  #b6a0ff;
+  --color-on-primary:               #271078;
+  --color-primary-dim:              #7c3aed;
+  --color-primary-fixed:            #e9ddff;
+  --color-on-primary-fixed:         #21005d;
+  --color-primary-container:        #190060;
+
+  --color-secondary:                #22d3ee;
+  --color-on-secondary:             #003e47;
+  --color-secondary-container:      #004f5a;
+  --color-secondary-fixed:          #b8ebf3;
+  --color-on-secondary-fixed:       #001f24;
+  --color-secondary-dim:            #0e7490;
+
+  --color-tertiary:                 #f472b6;
+  --color-on-tertiary:              #5e1135;
+  --color-tertiary-container:       #7d1c49;
+
+  --color-error:                    #f87171;
+  --color-on-error:                 #601410;
+
+  --color-outline:                  #938f99;
+  --color-outline-variant:          #2d2f45;
+}
+
+/* ── Obsidian gradient background ───────────────────────────────────── */
+html, body {
+  min-height: 100%;
+  background: var(--color-background);
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(124, 58, 237, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 85% 85%, rgba(34, 211, 238, 0.06) 0%, transparent 40%);
+  color: var(--color-on-surface);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ── Utility overrides ──────────────────────────────────────────────── */
+.bg-obsidian-gradient {
+  background: var(--color-background);
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(40, 40, 60, 0.3) 0%, transparent 30%),
+    radial-gradient(circle at 80% 80%, rgba(60, 40, 60, 0.3) 0%, transparent 30%);
+}
+
+/* ── Scrollbar styling ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-outline-variant); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-outline); }
