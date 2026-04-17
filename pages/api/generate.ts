@@ -122,11 +122,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     poolStatus: pool,
   });
 
-  // Trigger worker asynchronously (non-blocking)
-  // Derive base URL from incoming request so it works on Vercel preview/prod/local
-  const proto = req.headers['x-forwarded-proto'] || 'https';
-  const host  = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`;
+  // ── Worker trigger ───────────────────────────────────────────────────────────
+  // Priority order:
+  //  1. NEXT_PUBLIC_APP_URL  — manually set in Vercel env vars (most reliable)
+  //  2. VERCEL_URL           — auto-injected by Vercel on every deployment (no protocol)
+  //  3. x-forwarded headers  — fallback from request
+  //  4. localhost            — local dev only
+  const vercelUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : null;
+  const proto   = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || 'http';
+  const host    = (req.headers['x-forwarded-host'] as string) || (req.headers['host'] as string) || 'localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    || vercelUrl
+    || `${proto}://${host}`;
 
   fetch(`${baseUrl}/api/worker`, {
     method: 'POST',
