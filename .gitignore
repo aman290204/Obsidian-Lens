@@ -13,8 +13,10 @@ agency-agents/
 .env.local
 
 # Sensitive files (VERY IMPORTANT)
-*.json
+# Service account key - keep this out of git
 drive-oauth-478216-18e9603f23ad.json
+
+# Note: package.json, next.config.js, vercel.json are COMMITTED
 
 # Logs
 *.log
