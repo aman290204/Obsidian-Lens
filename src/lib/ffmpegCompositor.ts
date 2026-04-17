@@ -8,13 +8,16 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export async function compositeVideo(chapterBuffers: Buffer[]): Promise<Buffer> {
-  if (!chapterBuffers || chapterBuffers.length === 0) {
-    throw new Error('No chapters provided for compositing.');
+  // Filter out empty buffers (chapters where TTS/avatar failed)
+  const validBuffers = chapterBuffers.filter(b => b && b.length > 0);
+
+  if (!validBuffers || validBuffers.length === 0) {
+    throw new Error('No valid chapter data to composite (all chapters empty).');
   }
 
-  if (chapterBuffers.length === 1) {
-    // Optimization: if there's only 1 chapter, skip ffmpeg altogether!
-    return chapterBuffers[0];
+  if (validBuffers.length === 1) {
+    // Skip ffmpeg — return the single valid buffer directly
+    return validBuffers[0];
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obsidian-'));
@@ -23,10 +26,10 @@ export async function compositeVideo(chapterBuffers: Buffer[]): Promise<Buffer> 
 
   const inputFiles: string[] = [];
 
-  // Write all base64-decoded chunks linearly to the temporary directory
-  for (let i = 0; i < chapterBuffers.length; i++) {
+  // Write all valid chunks to temp directory
+  for (let i = 0; i < validBuffers.length; i++) {
     const filePath = path.join(tmpDir, `chapter_${i}.mp4`);
-    fs.writeFileSync(filePath, new Uint8Array(chapterBuffers[i]));
+    fs.writeFileSync(filePath, new Uint8Array(validBuffers[i]));
     inputFiles.push(filePath);
     
     // The concat demuxer expects exactly this literal formatted string

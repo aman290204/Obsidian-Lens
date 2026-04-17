@@ -14,7 +14,7 @@ export const config = { api: { bodyParser: true, externalResolver: true } };
 
 const CHAPTER_DURATION = 2;
 const WORKER_TIMEOUT_MS = 2 * 60 * 1000;
-const MAX_RETRIES = 5; // Prevent infinite loops
+const MAX_RETRIES = 30; // Each chapter = 1 self-trigger; 30 supports up to ~28 chapters
 
 // Folder ID cache (Redis-backed in production)
 const folderCache = new Map<string, string>();
@@ -108,13 +108,6 @@ async function handleStarting(job: any) {
   });
 
   logJobEvent(job.jobId, 'starting', `Starting generation (${totalChapters} chapters)`);
-
-  // Increment retry count before self-triggering
-  await updateJob(job.jobId, {
-    retryCount: (job.retryCount || 0) + 1,
-    lastUpdated: Date.now()
-  });
-
   await selfTrigger(job.jobId);
 }
 
@@ -204,12 +197,8 @@ async function handleGenerating(job: any) {
         hasVideo:  !!videoBase64,
       });
 
-      // Re-trigger to continue (avoid timeout)
+      // Re-trigger to continue next chapter
       if (chIdx < totalChapters - 1) {
-        await updateJob(job.jobId, {
-          retryCount: (job.retryCount || 0) + 1,
-          lastUpdated: Date.now()
-        });
         await selfTrigger(job.jobId);
         return;
       }
@@ -221,19 +210,12 @@ async function handleGenerating(job: any) {
     }
   }
 
-  // All chapters complete
+  // All chapters complete — advance to uploading
   await updateJob(job.jobId, {
     stage: 'uploading',
     progress: 70,
     lastUpdated: Date.now(),
   });
-
-  // Increment retry count before self-trigger
-  await updateJob(job.jobId, {
-    retryCount: (job.retryCount || 0) + 1,
-    lastUpdated: Date.now()
-  });
-
   await selfTrigger(job.jobId);
 }
 
