@@ -18,6 +18,10 @@ export default function CinemaPage() {
   const [playing,   setPlaying]   = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
 
+  // Script-only mode: TTS/avatar were unavailable; script is in Redis, exports still work
+  const isScriptOnly = String(videoId || '').startsWith('script-only:');
+  const jobId = isScriptOnly ? String(videoId).replace('script-only:', '') : String(videoId || '');
+
   const handleCopy = () => {
     navigator.clipboard.writeText(window.location.href).catch(() => {});
     setCopied(true);
@@ -31,7 +35,7 @@ export default function CinemaPage() {
       const res = await fetch('/api/export-slides', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: String(videoId), type }),
+        body: JSON.stringify({ jobId, type }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -93,6 +97,17 @@ export default function CinemaPage() {
             <span className="text-xs font-bold tracking-widest uppercase text-cyan-400">Ready to Export</span>
           </div>
         </div>
+
+        {/* Script-only mode banner */}
+        {isScriptOnly && (
+          <div className="mb-6 rounded-xl px-5 py-4 flex items-start gap-3" style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)' }}>
+            <span className="material-symbols-outlined text-yellow-400 mt-0.5" style={{ fontSize: '20px' }}>info</span>
+            <div>
+              <p className="text-yellow-300 font-semibold text-sm">Script-Only Mode</p>
+              <p className="text-yellow-200/70 text-xs mt-0.5">Audio/video generation was unavailable — your script was generated successfully. Use the Export buttons below to download your slides as PPTX, DOCX, or PDF.</p>
+            </div>
+          </div>
+        )}
 
         {/* Premium Video Player */}
         <div

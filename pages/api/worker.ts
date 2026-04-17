@@ -238,6 +238,22 @@ async function handleUploading(job: any) {
     chapterBuffers.push(buf);
   }
 
+  // Check if any chapter has actual media (audio or video)
+  const hasMedia = chapterBuffers.some(b => b.length > 0);
+
+  if (!hasMedia) {
+    // TTS and avatar both failed — no media to composite or upload.
+    // Mark job completed in "script-only" mode so users can export slides/PPTX/PDF.
+    await updateJob(job.jobId, { progress: 95, lastUpdated: Date.now() });
+    const scriptOnlyUrl = `script-only:${job.jobId}`;
+    await markJobCompleted(job.jobId, scriptOnlyUrl, job.jobId);
+    logJobEvent(job.jobId, 'completed', 'Script-only mode — TTS/avatar unavailable. Use export buttons to download slides.', {
+      chapters: totalChapters,
+      hasMedia: false,
+    });
+    return;
+  }
+
   await updateJob(job.jobId, { progress: 75, lastUpdated: Date.now() });
 
   // Composite
@@ -246,7 +262,7 @@ async function handleUploading(job: any) {
 
   await updateJob(job.jobId, { progress: 85, lastUpdated: Date.now() });
 
-  // Upload with organized folder structure
+  // Upload to Drive
   const folderPath = getFolderPath(job.userId);
   await ensureFolderExists(folderPath);
 
@@ -255,7 +271,6 @@ async function handleUploading(job: any) {
 
   await updateJob(job.jobId, { progress: 95, lastUpdated: Date.now() });
 
-  // Complete - use webContentLink for direct download
   await markJobCompleted(job.jobId, driveResult.webContentLink, driveResult.fileId);
   logJobEvent(job.jobId, 'completed', `Video ready`, { driveUrl: driveResult.webViewLink });
 }
