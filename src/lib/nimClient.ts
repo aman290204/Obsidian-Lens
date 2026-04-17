@@ -333,52 +333,53 @@ export interface TTSResult {
   usedFallback: boolean;
 }
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-
-const execAsync = promisify(exec);
-
+/**
+ * Direct REST call to NVIDIA NIM TTS: POST /v1/audio/speech
+ * Returns binary audio/wav, converted to base64.
+ * Tries primary voice (locale-native) then EN-IN fallback.
+ * No Python, no gRPC, no fnId required.
+ */
 export async function synthesiseSpeech(opts: TTSOptions): Promise<TTSResult> {
-  const langConfig = LANGUAGE_CONFIG[opts.language] || LANGUAGE_CONFIG.hinglish;
+  const langConfig    = LANGUAGE_CONFIG[opts.language] || LANGUAGE_CONFIG.english;
+  const primaryVoice  = opts.voice ?? getMagpieVoice(opts.avatarId ?? 'maya', langConfig.locale);
+  const fallbackVoice = getMagpieVoice(opts.avatarId ?? 'maya', 'en-IN');
 
-  // ── NVIDIA NIM TTS (via gRPC Python Bridge) ────────────────────────────────
-  for (const [model, fnId, isFallback] of [
-    [MODELS.tts.primary, MODELS.tts.primaryFnId, false],
-    [MODELS.tts.fallback, MODELS.tts.fallbackFnId, true],
-  ] as [string, string, boolean][]) {
-    if (!fnId) continue; // Skip if no fnId configured
-
+  for (const [voice, isFallback] of [
+    [primaryVoice,  false],
+    [fallbackVoice, true ],
+  ] as [string, boolean][]) {
+    let apiKey = '';
     try {
-      const apiKeyRow = acquireKey();
-      
-      // Determine voice (Magpie expects exact string format)
-      // E.g., 'Magpie-Multilingual.EN-US.Aria' - if hindi, perhaps 'Magpie-Multilingual.HI-IN.Female'
-      // We'll pass the exact voice model requested or a default.
-      // Resolve voice from persona — male/female + language locale
-      const voice = opts.voice ?? getMagpieVoice(opts.avatarId ?? 'maya', langConfig.locale ?? 'en-IN');
+      apiKey = acquireKey();
+      const safeText = opts.text.slice(0, 4000).replace(/[\x00-\x08\x0B-\x1F\x7F]/g, ' ');
 
-      // Map local to NVIDIA format (hi-IN -> hi-IN or similar)
-      const langCode = langConfig.locale || 'en-US';
+      const res = await fetch(`${BASE_URL}/audio/speech`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept':        'audio/wav',
+        },
+        body: JSON.stringify({ model: MODELS.tts.primary, input: safeText, voice }),
+      });
 
-      const scriptPath = path.resolve(process.cwd(), 'scripts', 'nim-riva-tts.py');
-      // Escape text properly for CLI
-      const safeText = opts.text.replace(/"/g, '\\"');
-
-      // The python bridge will print the base64 audio directly to stdout
-      const cmd = `python "${scriptPath}" --function-id "${fnId}" --api-key "${apiKeyRow}" --language-code "${langCode}" --voice "${voice}" --text "${safeText}"`;
-      
-      const { stdout, stderr } = await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 }); // 50MB buffer for audio
-      
-      if (!stdout || stdout.trim() === '') {
-        throw new Error(`Python bridge returned empty stdout. Error: ${stderr}`);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => `HTTP ${res.status}`);
+        reportFailure(apiKey, res.status);
+        throw new Error(`TTS HTTP ${res.status}: ${errText.slice(0, 200)}`);
       }
 
-      reportSuccess(apiKeyRow);
-      return { audioBase64: stdout.trim(), model, usedFallback: isFallback };
+      const buf = await res.arrayBuffer();
+      const b64 = Buffer.from(buf).toString('base64');
+      if (!b64) throw new Error('Empty audio buffer from TTS');
+
+      reportSuccess(apiKey);
+      console.info(`[NIM TTS] \u2705 voice: ${voice} | chars: ${safeText.length}`);
+      return { audioBase64: b64, model: MODELS.tts.primary, usedFallback: isFallback };
 
     } catch (e: any) {
-      console.error(`[NIM TTS] ${model} failed: ${e.message}`);
+      console.error(`[NIM TTS] ${isFallback ? 'Fallback' : 'Primary'} voice failed: ${e.message}`);
+      if (apiKey) reportFailure(apiKey, 0);
       if (!isFallback) continue;
     }
   }
