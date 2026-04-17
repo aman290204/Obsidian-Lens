@@ -243,13 +243,23 @@ export async function generateScript(opts: ScriptGenerationOptions): Promise<Gen
     `{"title":"...","script":"...","keyPoints":["...","...","..."]}`,
   ].join('\n');
 
-  for (const [model, isFallback] of [
-    [MODELS.llm.primary,  false],
-    [MODELS.llm.fallback, true ],
-  ] as [string, boolean][]) {
+  // Model priority: sarvam (Indian langs) or qwen (English) → llama fallback
+  const isIndianLang = opts.language !== 'english';
+  const candidates: [string, boolean][] = isIndianLang
+    ? [
+        [MODELS.llm.indianLang, false],  // sarvam-m — Indic specialist
+        [MODELS.llm.primary,    false],  // qwen — multilingual fallback
+        [MODELS.llm.fallback,   true ],  // llama — last resort
+      ]
+    : [
+        [MODELS.llm.primary,    false],  // qwen — best for English
+        [MODELS.llm.fallback,   true ],  // llama — fallback
+      ];
+
+  for (const [model, isFallback] of candidates) {
     try {
-      // BUG FIX: only add response_format for models that support it
-      const supportsJsonMode = !isFallback;
+      // response_format json_object: supported by qwen + sarvam, NOT deepseek/llama
+      const supportsJsonMode = (model === MODELS.llm.primary || model === MODELS.llm.indianLang);
 
       const res = await fetchNim({
         endpoint: '/chat/completions',
@@ -259,8 +269,9 @@ export async function generateScript(opts: ScriptGenerationOptions): Promise<Gen
             { role: 'system', content: langConfig.systemHint },
             { role: 'user',   content: userPrompt },
           ],
-          temperature: 0.7,
-          max_tokens:  4096,
+          temperature: 0.5,
+          top_p:       1,
+          max_tokens:  16384,
           ...(supportsJsonMode ? { response_format: { type: 'json_object' } } : {}),
         },
       });
@@ -279,6 +290,7 @@ export async function generateScript(opts: ScriptGenerationOptions): Promise<Gen
         parsed = { script: m?.[1] || content };
       }
 
+      console.info(`[NIM LLM] ✅ ${model} | lang: ${opts.language}`);
       return {
         title:        parsed.title     || `Chapter ${opts.chapterIndex + 1}: ${opts.topic.slice(0, 40)}`,
         script:       parsed.script    || content,
@@ -288,13 +300,13 @@ export async function generateScript(opts: ScriptGenerationOptions): Promise<Gen
       };
 
     } catch (e: any) {
-      console.error(`[NIM LLM] ${isFallback ? 'Fallback' : 'Primary'} failed: ${e.message}`);
-      if (!isFallback) continue; // try fallback
+      console.error(`[NIM LLM] ${model} failed: ${e.message}`);
+      if (!isFallback) continue;
       throw e;
     }
   }
 
-  throw new Error('Both primary and fallback LLM failed to generate script');
+  throw new Error('All LLM models failed to generate script');
 }
 
 // ── Persona → Magpie Voice mapping ─────────────────────────────────────────
