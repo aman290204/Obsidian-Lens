@@ -14,13 +14,42 @@ const METADATA = [
 export default function CinemaPage() {
   const router = useRouter();
   const { videoId } = router.query;
-  const [copied, setCopied] = useState(false);
-  const [playing, setPlaying] = useState(false);
+  const [copied,    setCopied]    = useState(false);
+  const [playing,   setPlaying]   = useState(false);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(window.location.href).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleExport = async (type: 'pptx' | 'docx' | 'pdf') => {
+    if (!videoId || exporting) return;
+    setExporting(type);
+    try {
+      const res = await fetch('/api/export-slides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: String(videoId), type }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || 'Export failed');
+        return;
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `obsidian-lens-${String(videoId).slice(0, 12)}.${type}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e.message || 'Export failed');
+    } finally {
+      setExporting(null);
+    }
   };
 
   if (!videoId) {
@@ -167,14 +196,47 @@ export default function CinemaPage() {
         </div>
 
         {/* Action buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Download video */}
           <button
-            className="flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-white transition-all hover:brightness-110 active:scale-95"
+            className="flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-white transition-all hover:brightness-110 active:scale-95 col-span-1 lg:col-span-1"
             style={{ background:'linear-gradient(to right, #7c3aed, #22d3ee)', boxShadow:'0 4px 20px rgba(124,58,237,0.3)' }}
+            onClick={() => window.open(`/api/video/${videoId}`, '_blank')}
           >
             <span className="material-symbols-outlined">download</span>
-            Download to Device
+            Download Video
           </button>
+
+          {/* Export slides dropdown */}
+          <div className="relative group">
+            <button
+              className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-on-surface transition-all hover:brightness-110 active:scale-95"
+              style={{ background:'rgba(19,21,32,0.9)', border:'1px solid rgba(124,58,237,0.4)' }}
+              disabled={!!exporting}
+            >
+              {exporting ? (
+                <><span className="material-symbols-outlined animate-spin text-primary">refresh</span> Exporting…</>
+              ) : (
+                <><span className="material-symbols-outlined text-primary">slideshow</span> Export Slides ▾</>
+              )}
+            </button>
+            {/* Dropdown */}
+            <div className="absolute left-0 right-0 bottom-full mb-2 rounded-xl overflow-hidden opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-200 z-20"
+              style={{ background:'rgba(19,21,32,0.97)', border:'1px solid rgba(45,47,69,0.8)', boxShadow:'0 -8px 30px rgba(0,0,0,0.4)' }}
+            >
+              {([['pptx','📊 PowerPoint (.pptx)'], ['docx','📘 Word Doc (.docx)'], ['pdf','📕 PDF (.pdf)']] as [string, string][]).map(([t, label]) => (
+                <button
+                  key={t}
+                  onClick={() => handleExport(t as 'pptx' | 'docx' | 'pdf')}
+                  className="w-full text-left px-4 py-3 text-sm text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Share link */}
           <button
             onClick={handleCopy}
             className="flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-on-surface transition-all hover:brightness-110 active:scale-95"
@@ -183,6 +245,8 @@ export default function CinemaPage() {
             <span className="material-symbols-outlined">{copied ? 'check' : 'link'}</span>
             {copied ? 'Copied!' : 'Share Link'}
           </button>
+
+          {/* Generate another */}
           <Link
             href="/create"
             className="flex items-center justify-center gap-3 py-4 rounded-xl font-semibold transition-all hover:brightness-110 active:scale-95 text-secondary"

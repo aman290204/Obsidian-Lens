@@ -143,17 +143,30 @@ async function handleGenerating(job: any) {
         lastUpdated: Date.now(),
       });
 
-      // Generate
+      // Fetch document context from Redis if a doc was attached
+      let docContext: string | undefined;
+      if (job.docId) {
+        const docData = await getFromRedis(`doc:${job.docId}`);
+        docContext = docData?.text;
+      }
+
+      // Generate script — pass doc context + slide language
       const script = await generateScript({
         topic: job.prompt || 'Untitled',
         language: (job.language as any) || 'english',
+        slideLanguage: job.slideLanguage || 'english',
         durationMins: CHAPTER_DURATION,
         chapterIndex: chIdx,
         totalChapters,
+        docContext,
       });
 
-      // TTS
-      const tts = await synthesiseSpeech({ text: script.script, language: job.language || 'english' });
+      // TTS — pass avatarId so the correct persona voice is selected
+      const tts = await synthesiseSpeech({
+        text:     script.script,
+        language: job.language || 'english',
+        avatarId: job.avatarId || 'ethan',
+      });
 
       // Avatar
       const avatar = await renderAvatar({

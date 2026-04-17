@@ -26,7 +26,7 @@ export async function compositeVideo(chapterBuffers: Buffer[]): Promise<Buffer> 
   // Write all base64-decoded chunks linearly to the temporary directory
   for (let i = 0; i < chapterBuffers.length; i++) {
     const filePath = path.join(tmpDir, `chapter_${i}.mp4`);
-    fs.writeFileSync(filePath, chapterBuffers[i]);
+    fs.writeFileSync(filePath, new Uint8Array(chapterBuffers[i]));
     inputFiles.push(filePath);
     
     // The concat demuxer expects exactly this literal formatted string

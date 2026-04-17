@@ -1,26 +1,37 @@
-# Build & dependencies
+# ── Build & runtime artefacts ─────────────────────────────────────────────────
 node_modules/
 .next/
+.vercel/
 
-# Local tools & configs
+# ── Environment files (ALL — never commit secrets) ────────────────────────────
+.env
+.env.*
+.env.local
+
+# ── Service account / credential JSON files ───────────────────────────────────
+credentials.json
+drive-oauth-478216-18e9603f23ad.json
+*.json.bak
+
+# ── Test / scratch artefacts ──────────────────────────────────────────────────
+test_audio_b64.txt
+*.wav
+*.mp4.tmp
+
+# ── Tool / IDE metadata (not useful to collaborators) ────────────────────────
 .claude/
 .code-review-graph/
 .omc/
 agency-agents/
+.venv/
 
-# Environment variables
-.env*
-.env.local
-
-# Sensitive files (VERY IMPORTANT)
-# Service account key - keep this out of git
-drive-oauth-478216-18e9603f23ad.json
-
-# Note: package.json, next.config.js, vercel.json are COMMITTED
-
-# Logs
-*.log
-
-# OS files
+# ── OS artefacts ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+# Reference repos / local-only
+Voxora AI/
+Summary.pdf

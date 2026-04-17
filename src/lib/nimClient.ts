@@ -183,11 +183,13 @@ async function fetchNim({ endpoint, body, headers = {}, retries = 2 }: FetchNimO
 
 // ── LLM — Script Generation ──────────────────────────────────────────────────
 export interface ScriptGenerationOptions {
-  topic:         string;
-  language:      'hinglish' | 'marathi' | 'english' | 'hindi';
-  durationMins:  number;
-  chapterIndex:  number;
-  totalChapters: number;
+  topic:          string;
+  language:       string;   // narration language key (hinglish, tanglish, etc.)
+  slideLanguage?: string;   // slide text language (english, hindi, tamil, etc.)
+  durationMins:   number;
+  chapterIndex:   number;
+  totalChapters:  number;
+  docContext?:    string;   // extracted text from uploaded document
 }
 
 export interface GeneratedScript {
@@ -208,16 +210,33 @@ export async function generateScript(opts: ScriptGenerationOptions): Promise<Gen
   const wordsPerMin     = 140;
   const chapterWordCount = opts.durationMins * wordsPerMin;
 
+  const slideLanguage = opts.slideLanguage || 'english';
+
+  // Build document context block (Voxora fileContext pattern)
+  const docBlock = opts.docContext
+    ? [
+        `SOURCE DOCUMENT (use this as your primary knowledge base — do NOT invent facts not present here):`,
+        `${'─'.repeat(60)}`,
+        opts.docContext.slice(0, 10000), // hard cap at ~10K chars for prompt safety
+        `${'─'.repeat(60)}`,
+        ``,
+      ].join('\n')
+    : '';
+
   const userPrompt = [
+    docBlock,
     `Create a ${opts.durationMins}-minute video script for Chapter ${opts.chapterIndex + 1} of ${opts.totalChapters}.`,
     ``,
     `Topic: ${opts.topic}`,
     ``,
     `Requirements:`,
-    `- Natural, conversational tone suitable for video narration`,
+    `- Natural, conversational NARRATION in ${langConfig.systemHint.slice(0, 60)}...`,
     `- Target audience: Indian learners aged 18–35`,
     `- Approximately ${chapterWordCount} words (${opts.durationMins} min @ ${wordsPerMin} wpm)`,
     `- Include smooth chapter transitions`,
+    `- SLIDE LANGUAGE RULE: All slide headings, bullet points and key terms in the "keyPoints" array`,
+    `  must be written in ${slideLanguage.toUpperCase()} (e.g. if Hindi: use Devanagari script).`,
+    `  The narration "script" field stays in the narration language.`,
     ``,
     `Return ONLY valid JSON (no markdown, no code fences):`,
     `{"title":"...","script":"...","keyPoints":["...","...","..."]}`,
@@ -277,11 +296,35 @@ export async function generateScript(opts: ScriptGenerationOptions): Promise<Gen
   throw new Error('Both primary and fallback LLM failed to generate script');
 }
 
+// ── Persona → Magpie Voice mapping ─────────────────────────────────────────
+// Magpie-Multilingual voice format: "Magpie-Multilingual.<LOCALE>.<VoiceName>"
+// Male avatars   → male voice IDs ; Female avatars → female voice IDs
+const PERSONA_VOICE_MAP: Record<string, { gender: 'male' | 'female'; magpieVoice: string }> = {
+  ethan: { gender: 'male',   magpieVoice: 'James'  },   // Deep professional male
+  maya:  { gender: 'female', magpieVoice: 'Aria'   },   // Clear female
+  kenji: { gender: 'male',   magpieVoice: 'Daniel' },   // Low calm male
+  clara: { gender: 'female', magpieVoice: 'Emma'   },   // Energetic female
+  arjun: { gender: 'male',   magpieVoice: 'Ravi'   },   // Indian male
+  priya: { gender: 'female', magpieVoice: 'Priya'  },   // Indian female
+};
+
+/**
+ * Build Magpie voice string for a given persona and language locale.
+ * Falls back to Aria (female) / James (male) if persona unknown.
+ */
+function getMagpieVoice(avatarId: string, locale: string): string {
+  const persona = PERSONA_VOICE_MAP[avatarId] ?? PERSONA_VOICE_MAP['maya'];
+  // Normalize locale to UPPER-XX format expected by Magpie (e.g. hi-IN -> HI-IN)
+  const normLocale = locale.replace('-', '-').toUpperCase();
+  return `Magpie-Multilingual.${normLocale}.${persona.magpieVoice}`;
+}
+
 // ── TTS — Voice Synthesis ────────────────────────────────────────────────────
 export interface TTSOptions {
   text:      string;
   language:  string;
-  voice?:    string;
+  avatarId?: string;  // which persona is speaking — determines voice
+  voice?:    string;  // explicit override (optional)
 }
 
 export interface TTSResult {
@@ -312,7 +355,8 @@ export async function synthesiseSpeech(opts: TTSOptions): Promise<TTSResult> {
       // Determine voice (Magpie expects exact string format)
       // E.g., 'Magpie-Multilingual.EN-US.Aria' - if hindi, perhaps 'Magpie-Multilingual.HI-IN.Female'
       // We'll pass the exact voice model requested or a default.
-      const voice = "Magpie-Multilingual.EN-US.Aria"; // You can map this dynamically if needed
+      // Resolve voice from persona — male/female + language locale
+      const voice = opts.voice ?? getMagpieVoice(opts.avatarId ?? 'maya', langConfig.locale ?? 'en-IN');
 
       // Map local to NVIDIA format (hi-IN -> hi-IN or similar)
       const langCode = langConfig.locale || 'en-US';

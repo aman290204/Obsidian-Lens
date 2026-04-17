@@ -35,10 +35,12 @@ const MAX_CHAPTERS = 30;
 
 // Zod schema for input validation
 const GenerateSchema = z.object({
-  prompt: z.string().min(1).max(500).trim(),
-  language: z.enum(['hinglish', 'tanglish', 'tenglish', 'manglish', 'kanglish', 'benglish', 'marathlish', 'gujlish', 'urdu', 'odia', 'english']),
-  duration: z.number().min(1).max(60),
-  avatar: z.string().min(1).max(50),
+  prompt:        z.string().min(1).max(500).trim(),
+  language:      z.enum(['hinglish', 'tanglish', 'tenglish', 'manglish', 'kanglish', 'benglish', 'marathlish', 'gujlish', 'urdu', 'odia', 'english']),
+  slideLanguage: z.string().optional().default('english'),
+  duration:      z.number().min(1).max(60),
+  avatar:        z.string().min(1).max(50),
+  docId:         z.string().optional(),
 });
 
 // Simple userId generation (in production, use auth)
@@ -75,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  const { prompt, language, duration: durationMins, avatar } = validation.data;
+  const { prompt, language, slideLanguage, duration: durationMins, avatar, docId } = validation.data;
 
   // Pool health check
   const pool = poolStatus();
@@ -96,9 +98,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     userId,
     prompt: prompt.trim(),
     language,
+    slideLanguage,
     durationMins,
     avatarId: avatar,
     totalChapters,
+    docId,
   });
 
   // Respond immediately

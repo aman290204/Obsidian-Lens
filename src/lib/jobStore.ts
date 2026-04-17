@@ -36,10 +36,12 @@ export interface JobRecord {
 
   // Metadata (for reference)
   prompt?:       string;
-  language?:     string;
+  language?:     string;       // narration language (Hinglish, Tanglish, etc.)
+  slideLanguage?: string;      // slide text language (English, Hindi, Tamil, etc.)
   durationMins?: number;
   avatarId?:     string;
   totalChapters?: number;
+  docId?:        string;       // Redis key for attached document context
 
   // Output
   url?:          string;  // Google Drive download link
@@ -58,13 +60,15 @@ import { saveJob as saveToRedis, getJob as getFromRedis, listJobs as listFromRed
 
 // ── CRUD helpers (Persisted via Redis) ───────────────────────────────────────
 export async function createJob(params: {
-  jobId:        string;
-  userId:       string;
-  prompt?:      string;
-  language?:    string;
-  durationMins?: number;
-  avatarId?:    string;
+  jobId:          string;
+  userId:         string;
+  prompt?:        string;
+  language?:      string;
+  slideLanguage?: string;
+  durationMins?:  number;
+  avatarId?:      string;
   totalChapters?: number;
+  docId?:         string;
 }): Promise<JobRecord> {
   const now = Date.now();
   const record: JobRecord = {
@@ -81,9 +85,11 @@ export async function createJob(params: {
     // Optional metadata
     prompt:        params.prompt,
     language:      params.language,
+    slideLanguage: params.slideLanguage,
     durationMins:  params.durationMins,
     avatarId:      params.avatarId,
     totalChapters: params.totalChapters,
+    docId:         params.docId,
     models: {
       llm:          process.env.NIM_LLM_PRIMARY  || 'qwen/qwen3.5-122b-a10b',
       tts:          process.env.NIM_TTS_PRIMARY  || 'magpie-tts-multilingual',
