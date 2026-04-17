@@ -1,13 +1,10 @@
 /**
  * GET /api/video/[videoId]
- * ─────────────────────────────────────────────────────────────────────────────
- * Returns metadata for a completed video.
- * In production, fetches the Google Drive webContentLink, title, etc.
- * For now, resolves via the jobStore using the videoId pattern.
+ * Returns video metadata from Redis job record.
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { listJobs } from '../../../src/lib/jobStore';
+import { getJob } from '../../../src/lib/jobStore';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -20,41 +17,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Try to find the job that produced this video
-    const jobs      = await listJobs();
-    const parentJob = jobs.find(j => j.videoId === videoId);
+    const job = await getJob(videoId);
 
-    if (parentJob) {
+    if (job && job.status === 'completed' && job.url) {
       return res.status(200).json({
-        videoId,
-        title:          parentJob.prompt, // use full title
-        language:       parentJob.language,
-        durationMins:   parentJob.durationMins,
-        chapters:       parentJob.totalChapters,
-        createdAt:      new Date(parentJob.completedAt || parentJob.startedAt).toISOString(),
-        models:         parentJob.models,
-        webContentLink: parentJob.driveLink || `https://drive.google.com/uc?id=${videoId}`,
-        status:         'completed',
+        videoId: job.jobId,
+        title: job.prompt || `Video - ${job.jobId.slice(0, 8)}`,
+        language: job.language || 'english',
+        durationMins: job.durationMins || 15,
+        totalChapters: job.totalChapters,
+        createdAt: new Date(job.createdAt).toISOString(),
+        models: job.models,
+        url: job.url,
+        status: 'completed',
       });
     }
 
-    // Graceful fallback — videoId may come from a previous session
-    const durationFromId = parseInt(videoId.split('-')[2] || '600', 10);
-    return res.status(200).json({
-      videoId,
-      title:          `AI Explainer Video`,
-      language:       'hinglish',
-      durationMins:   Math.round(durationFromId / 60) || 15,
-      chapters:       5,
-      createdAt:      new Date().toISOString(),
-      models: {
-        llm:          process.env.NIM_LLM_PRIMARY  || 'qwen/qwen2.5-72b-instruct',
-        tts:          process.env.NIM_TTS_PRIMARY  || 'magpie-tts-multilingual',
-        avatar:       process.env.NIM_AVATAR       || 'audio2face-3d',
-        usedFallback: false,
-      },
-      webContentLink: `https://drive.google.com/uc?id=${videoId}`,
-      status:         'completed',
+    // Job not found or not complete
+    return res.status(404).json({ 
+      error: 'Video not found or not yet processed',
+      jobId: videoId,
+      status: job?.status || 'not_found'
     });
 
   } catch (error) {

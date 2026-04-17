@@ -1,31 +1,19 @@
 /**
  * GET /api/progress/[jobId]
- * ─────────────────────────────────────────────────────────────────────────────
- * Server-Sent Events (SSE) stream that emits real-time job progress
- * from the in-memory job store.
- *
- * Events emitted:
- *   { type: 'progress', job: JobRecord, poolStatus: {...} }
- *   { type: 'done',     job: JobRecord, videoId: string }
- *   { type: 'error',    message: string }
- *
- * Falls back to polling every 2s.
- * Closes automatically when the job reaches DONE or FAILED.
+ * Server-Sent Events (SSE) stream for real-time job progress.
+ * Works with the new step-based job schema.
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getJob } from '../../../src/lib/jobStore';
-import { poolStatus } from '../../../src/lib/nimKeyPool';
 
-// Disable Next.js body parsing for SSE routes
 export const config = { api: { bodyParser: false } };
 
-const POLL_INTERVAL_MS  = 1500;
-const MAX_DURATION_MS   = 30 * 60 * 1000; // 30 min hard cap
+const POLL_INTERVAL_MS = 1500;
+const MAX_DURATION_MS = 30 * 60 * 1000;
 
 function send(res: NextApiResponse, event: string, data: object) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  // Attempt to flush — works with Node's HTTP module
   (res as any).flush?.();
 }
 
@@ -39,22 +27,19 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Invalid job ID' });
   }
 
-  // ── SSE headers ──────────────────────────────────────────────────────────
-  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection',    'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
 
-  // Send initial connection acknowledgment
   send(res, 'connected', { jobId, time: Date.now() });
 
-  let closed    = false;
+  let closed = false;
   const startMs = Date.now();
 
   const interval = setInterval(async () => {
     if (closed) return clearInterval(interval);
 
-    // Hard timeout guard
     if (Date.now() - startMs > MAX_DURATION_MS) {
       send(res, 'error', { message: 'Stream timeout — job took too long.' });
       clearInterval(interval);
@@ -65,46 +50,37 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const job = await getJob(jobId);
 
     if (!job) {
-      // Job not in store — either expired or never existed
-      send(res, 'error', { message: `Job ${jobId} not found. It may have expired.` });
+      send(res, 'error', { message: `Job ${jobId} not found or expired.` });
       clearInterval(interval);
       res.end();
       return;
     }
 
-    const pool = poolStatus();
-
-    // Build a clean snapshot for the client
     const snapshot = {
-      jobId:           job.jobId,
-      phase:           job.phase,
-      overallProgress: job.overallProgress,
-      chapters:        job.chapters.map(c => ({
-        index:    c.index,
-        phase:    c.phase,
-        title:    c.title,
-        progress: c.progress,
-      })),
-      models:   job.models,
-      startedAt: job.startedAt,
-      updatedAt: job.updatedAt,
-      pool: {
-        healthy: pool.healthy,
-        total:   pool.total,
-        rpm:     pool.rpm,
-        cooling: pool.cooling,
-      },
+      jobId: job.jobId,
+      userId: job.userId,
+      status: job.status,
+      stage: job.stage,
+      progress: job.progress,
+      error: job.error,
+      prompt: job.prompt,
+      language: job.language,
+      totalChapters: job.totalChapters,
+      models: job.models,
+      createdAt: job.createdAt,
+      lastUpdated: job.lastUpdated,
+      url: job.url,
     };
 
-    if (job.phase === 'DONE') {
-      send(res, 'done', { ...snapshot, videoId: job.videoId });
+    if (job.status === 'completed') {
+      send(res, 'done', snapshot);
       clearInterval(interval);
       res.end();
       return;
     }
 
-    if (job.phase === 'FAILED') {
-      send(res, 'error', { ...snapshot, message: job.errorMessage || 'Pipeline failed' });
+    if (job.status === 'failed') {
+      send(res, 'error', { ...snapshot, message: job.error || 'Job failed' });
       clearInterval(interval);
       res.end();
       return;
@@ -114,7 +90,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   }, POLL_INTERVAL_MS);
 
-  // ── Cleanup on client disconnect ──────────────────────────────────────────
   req.on('close', () => {
     closed = true;
     clearInterval(interval);
