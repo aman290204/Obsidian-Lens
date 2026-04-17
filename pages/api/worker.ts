@@ -279,48 +279,37 @@ async function selfTrigger(jobId: string): Promise<boolean> {
   // Use VERCEL_URL (auto-injected) — same fix as generate.ts
   const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
   const baseUrl   = process.env.NEXT_PUBLIC_APP_URL || vercelUrl || 'http://localhost:3000';
-  const MAX_ATTEMPTS = 3;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const res = await fetch(`${baseUrl}/api/worker`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId }),
-      });
+  // FIRE-AND-FORGET: send the trigger with a short timeout to confirm dispatch,
+  // then return immediately WITHOUT awaiting the next worker's full response.
+  // Awaiting the full response was causing 300s cascading timeouts:
+  //   starting (awaits generating) -> generating runs 300s -> starting 504
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 5000); // 5s to send
 
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => 'Unknown error');
-        const msg = `HTTP ${res.status}: ${errorText}`;
-
-        if (attempt < MAX_ATTEMPTS) {
-          const delay = 1000 * attempt; // exponential backoff: 1s, 2s, 3s
-          logJobEvent(jobId, 'warning', `Self-trigger attempt ${attempt} failed, retrying in ${delay}ms`, { error: msg });
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-
-        logJobEvent(jobId, 'error', `Self-trigger failed after ${MAX_ATTEMPTS} attempts`, { error: msg });
-        return false;
+  try {
+    // We intentionally do NOT await the response body — just the send
+    fetch(`${baseUrl}/api/worker`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ jobId }),
+      signal:  controller.signal,
+    }).catch(err => {
+      // AbortError is expected (we aborted after 5s to stop waiting)
+      if (err.name !== 'AbortError') {
+        console.warn(`[Worker] Self-trigger background error for ${jobId}:`, err.message);
       }
-
-      logJobEvent(jobId, 'trigger', `Self-trigger successful (attempt ${attempt})`);
-      return true;
-    } catch (err: any) {
-      if (attempt < MAX_ATTEMPTS) {
-        const delay = 1000 * attempt;
-        logJobEvent(jobId, 'warning', `Self-trigger network error (attempt ${attempt}), retrying`, { error: err.message });
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
-
-      logJobEvent(jobId, 'error', `Self-trigger failed after ${MAX_ATTEMPTS} attempts`, { error: err.message });
-      return false;
-    }
+    });
+    clearTimeout(timeoutId);
+    logJobEvent(jobId, 'trigger', 'Self-trigger dispatched (fire-and-forget)');
+    return true;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    logJobEvent(jobId, 'warning', `Self-trigger dispatch failed: ${err.message}`);
+    return false;
   }
-
-  return false;
 }
+
 
 // Chapter storage
 async function saveChapterResult(jobId: string, chapterIndex: number, data: any) {

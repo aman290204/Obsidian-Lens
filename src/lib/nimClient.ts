@@ -377,6 +377,7 @@ export async function synthesiseSpeech(opts: TTSOptions): Promise<TTSResult> {
       const safeText = opts.text.slice(0, 4000).replace(/[\x00-\x08\x0B-\x1F\x7F]/g, ' ');
 
       // Riva SynthesizeSpeechRequest fields as JSON
+      // 30s timeout — NVCF can hang; don't let it block the worker for 300s
       const res = await fetch(`${NVCF_URL}/${fnId}`, {
         method:  'POST',
         headers: {
@@ -390,6 +391,7 @@ export async function synthesiseSpeech(opts: TTSOptions): Promise<TTSResult> {
           sample_rate_hz: 22050,
           voice_name:     voice,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!res.ok) {
