@@ -150,7 +150,7 @@ async function handleGenerating(job: any) {
         docContext = docData?.text;
       }
 
-      // Generate script — pass doc context + slide language
+      // Generate script
       const script = await generateScript({
         topic: job.prompt || 'Untitled',
         language: (job.language as any) || 'english',
@@ -161,33 +161,51 @@ async function handleGenerating(job: any) {
         docContext,
       });
 
-      // TTS — pass avatarId so the correct persona voice is selected
-      const tts = await synthesiseSpeech({
-        text:     script.script,
-        language: job.language || 'english',
-        avatarId: job.avatarId || 'ethan',
-      });
+      // TTS — optional: if it fails, continue with silent audio
+      let audioBase64: string | null = null;
+      try {
+        const tts = await synthesiseSpeech({
+          text:     script.script,
+          language: job.language || 'english',
+          avatarId: job.avatarId || 'ethan',
+        });
+        audioBase64 = tts.audioBase64;
+      } catch (ttsErr: any) {
+        logJobEvent(job.jobId, 'warning', `TTS failed for chapter ${chIdx + 1} — continuing without audio`, { error: ttsErr.message });
+      }
 
-      // Avatar
-      const avatar = await renderAvatar({
-        audioBase64: tts.audioBase64,
-        avatarId: job.avatarId || 'ethan',
-        emotionStyle: 'engaged',
-      });
+      // Avatar — optional: if it fails (or no audio), skip and use slides-only
+      let videoBase64: string | null = null;
+      if (audioBase64) {
+        try {
+          const avatar = await renderAvatar({
+            audioBase64,
+            avatarId: job.avatarId || 'ethan',
+            emotionStyle: 'engaged',
+          });
+          videoBase64 = avatar.videoBase64;
+        } catch (avatarErr: any) {
+          logJobEvent(job.jobId, 'warning', `Avatar failed for chapter ${chIdx + 1} — using audio-only`, { error: avatarErr.message });
+        }
+      }
 
-      // Store chapter result
+      // Store chapter result — videoBase64 may be null (slides-only composite handled upstream)
       await saveChapterResult(job.jobId, chIdx, {
-        videoBase64: avatar.videoBase64,
-        script: script.script,
-        title: script.title,
-        completedAt: Date.now(),
+        videoBase64:  videoBase64  || null,
+        audioBase64:  audioBase64  || null,
+        script:       script.script,
+        title:        script.title,
+        keyPoints:    script.keyPoints,
+        completedAt:  Date.now(),
       });
 
-      logJobEvent(job.jobId, 'generating', `Chapter ${chIdx + 1}/${totalChapters} done`);
+      logJobEvent(job.jobId, 'generating', `Chapter ${chIdx + 1}/${totalChapters} done`, {
+        hasAudio:  !!audioBase64,
+        hasVideo:  !!videoBase64,
+      });
 
       // Re-trigger to continue (avoid timeout)
       if (chIdx < totalChapters - 1) {
-        // Increment retry count before self-trigger
         await updateJob(job.jobId, {
           retryCount: (job.retryCount || 0) + 1,
           lastUpdated: Date.now()
@@ -222,14 +240,20 @@ async function handleGenerating(job: any) {
 async function handleUploading(job: any) {
   const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
 
-  // Load all chapter buffers
+  // Load all chapter buffers — videoBase64 may be null if TTS/avatar was skipped
   const chapterBuffers: Buffer[] = [];
   for (let i = 0; i < totalChapters; i++) {
     const chapterData = await getChapterResult(job.jobId, i);
-    if (!chapterData?.videoBase64) {
+    if (!chapterData) {
       throw new Error(`Missing chapter ${i} data`);
     }
-    chapterBuffers.push(Buffer.from(chapterData.videoBase64, 'base64'));
+    // Prefer video, fall back to audio-only, fall back to empty buffer (slides-only)
+    const buf = chapterData.videoBase64
+      ? Buffer.from(chapterData.videoBase64, 'base64')
+      : chapterData.audioBase64
+        ? Buffer.from(chapterData.audioBase64, 'base64')
+        : Buffer.alloc(0);
+    chapterBuffers.push(buf);
   }
 
   await updateJob(job.jobId, { progress: 75, lastUpdated: Date.now() });
@@ -255,7 +279,9 @@ async function handleUploading(job: any) {
 }
 
 async function selfTrigger(jobId: string): Promise<boolean> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://localhost:${process.env.PORT || 3000}`;
+  // Use VERCEL_URL (auto-injected) — same fix as generate.ts
+  const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
+  const baseUrl   = process.env.NEXT_PUBLIC_APP_URL || vercelUrl || 'http://localhost:3000';
   const MAX_ATTEMPTS = 3;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
