@@ -14,12 +14,31 @@ export const config = { api: { bodyParser: true, externalResolver: true } };
 
 const CHAPTER_DURATION = 2;
 const WORKER_TIMEOUT_MS = 2 * 60 * 1000;
+const MAX_RETRIES = 5; // Prevent infinite loops
 
-function getFolderPath(userId: string): string {
+// Folder ID cache (Redis-backed in production)
+const folderCache = new Map<string, string>();
+function getFolderCacheKey(userId: string): string {
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const dd = String(now.getDate()).padStart(2,'0');
-  return `/videos/${ym}/${dd}/${userId}/`;
+  return `/videos/${ym}/${dd}/${userId}`;
+}
+
+function getFolderPath(userId: string): string {
+  return getFolderCacheKey(userId) + '/';
+}
+
+// Structured logging helper
+function logJobEvent(jobId: string, stage: string, message: string, meta?: Record<string, any>) {
+  const log = {
+    jobId,
+    stage,
+    message,
+    timestamp: new Date().toISOString(),
+    ...meta
+  };
+  console.log(JSON.stringify(log)); // Use structured logging (send to service in prod)
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -43,9 +62,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.json({ ok: true, reason: 'already completed' });
     }
 
+    // Retry limit check - PREVENT INFINITE LOOPS
+    if (job.retryCount >= MAX_RETRIES) {
+      await markJobFailed(jobId, `Max retries (${MAX_RETRIES}) exceeded`);
+      logJobEvent(jobId, 'failed', `Max retries exceeded (count: ${job.retryCount})`);
+      return res.json({ ok: true, reason: 'max-retries' });
+    }
+
     // Timeout guard
     if (Date.now() - job.lastUpdated > WORKER_TIMEOUT_MS) {
       await markJobFailed(jobId, 'Worker timeout - job stalled');
+      logJobEvent(jobId, 'failed', 'Job timeout - stalled');
       return res.json({ ok: true, reason: 'timeout' });
     }
 
@@ -58,13 +85,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await handleUploading(job);
     } else {
       await markJobFailed(jobId, `Unknown stage: ${job.stage}`);
+      logJobEvent(jobId, 'failed', `Unknown stage: ${job.stage}`);
       return res.status(500).json({ error: 'Invalid job stage' });
     }
 
     return res.json({ ok: true });
 
   } catch (err: any) {
-    console.error(`[Worker] Job ${jobId} error:`, err);
+    logJobEvent(jobId, 'error', `Worker exception`, { error: err.message });
     await markJobFailed(jobId, err.message || 'Unknown worker error');
     return res.status(500).json({ error: err.message || 'Pipeline failed' });
   }
@@ -72,24 +100,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function handleStarting(job: any) {
   const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
-  
+
   await updateJob(job.jobId, {
     stage: 'generating',
     progress: 5,
     lastUpdated: Date.now(),
   });
 
-  console.log(`[Worker] ${job.jobId}: Starting generation (${totalChapters} chapters)`);
+  logJobEvent(job.jobId, 'starting', `Starting generation (${totalChapters} chapters)`);
+
+  // Increment retry count before self-triggering
+  await updateJob(job.jobId, {
+    retryCount: (job.retryCount || 0) + 1,
+    lastUpdated: Date.now()
+  });
+
   await selfTrigger(job.jobId);
 }
 
 async function handleGenerating(job: any) {
   const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
-  
+
   // Check if we have chapter results stored
   const chapterBuffers: Buffer[] = new Array(totalChapters);
   let startChapter = 0;
-  
+
   for (let i = 0; i < totalChapters; i++) {
     const chapterData = await getChapterResult(job.jobId, i);
     if (chapterData?.videoBase64) {
@@ -98,7 +133,7 @@ async function handleGenerating(job: any) {
     }
   }
 
-  console.log(`[Worker] ${job.jobId}: Resuming from chapter ${startChapter + 1}/${totalChapters}`);
+  logJobEvent(job.jobId, 'generating', `Resuming from chapter ${startChapter + 1}/${totalChapters}`);
 
   // Process remaining chapters one at a time
   for (let chIdx = startChapter; chIdx < totalChapters; chIdx++) {
@@ -135,16 +170,21 @@ async function handleGenerating(job: any) {
         completedAt: Date.now(),
       });
 
-      console.log(`[Worker] ${job.jobId}: Chapter ${chIdx + 1}/${totalChapters} done`);
+      logJobEvent(job.jobId, 'generating', `Chapter ${chIdx + 1}/${totalChapters} done`);
 
       // Re-trigger to continue (avoid timeout)
       if (chIdx < totalChapters - 1) {
+        // Increment retry count before self-trigger
+        await updateJob(job.jobId, {
+          retryCount: (job.retryCount || 0) + 1,
+          lastUpdated: Date.now()
+        });
         await selfTrigger(job.jobId);
         return;
       }
 
     } catch (err: any) {
-      console.error(`[Worker] ${job.jobId}: Chapter ${chIdx + 1} failed:`, err.message);
+      logJobEvent(job.jobId, 'error', `Chapter ${chIdx + 1} failed`, { error: err.message });
       await markJobFailed(job.jobId, `Chapter ${chIdx + 1} failed: ${err.message}`);
       throw err;
     }
@@ -157,12 +197,18 @@ async function handleGenerating(job: any) {
     lastUpdated: Date.now(),
   });
 
+  // Increment retry count before self-trigger
+  await updateJob(job.jobId, {
+    retryCount: (job.retryCount || 0) + 1,
+    lastUpdated: Date.now()
+  });
+
   await selfTrigger(job.jobId);
 }
 
 async function handleUploading(job: any) {
   const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
-  
+
   // Load all chapter buffers
   const chapterBuffers: Buffer[] = [];
   for (let i = 0; i < totalChapters; i++) {
@@ -176,7 +222,7 @@ async function handleUploading(job: any) {
   await updateJob(job.jobId, { progress: 75, lastUpdated: Date.now() });
 
   // Composite
-  console.log(`[Worker] ${job.jobId}: Compositing...`);
+  logJobEvent(job.jobId, 'uploading', 'Compositing video...');
   const finalVideoBuffer = await compositeVideo(chapterBuffers);
 
   await updateJob(job.jobId, { progress: 85, lastUpdated: Date.now() });
@@ -192,19 +238,29 @@ async function handleUploading(job: any) {
 
   // Complete
   await markJobCompleted(job.jobId, driveUrl);
-  console.log(`[Worker] ${job.jobId}: Complete → ${driveUrl}`);
+  logJobEvent(job.jobId, 'completed', `Video ready`, { driveUrl });
 }
 
-async function selfTrigger(jobId: string) {
+async function selfTrigger(jobId: string): Promise<boolean> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://localhost:${process.env.PORT || 3000}`;
+
   try {
-    await fetch(`${baseUrl}/api/worker`, {
+    const res = await fetch(`${baseUrl}/api/worker`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId }),
-    }).catch(() => {});
-  } catch (err) {
-    console.warn('[Worker] Self-trigger failed:', err);
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(`HTTP ${res.status}: ${errorText}`);
+    }
+
+    logJobEvent(jobId, 'trigger', `Self-trigger successful`);
+    return true;
+  } catch (err: any) {
+    logJobEvent(jobId, 'error', `Self-trigger failed`, { error: err.message });
+    return false;
   }
 }
 

@@ -8,6 +8,20 @@ redisClient.on('error', (err) => {
 });
 
 const JOB_TTL_SEC = 24 * 60 * 60; // 24 hours
+const RATE_LIMIT_WINDOW_SEC = 60; // 1 minute
+const RATE_LIMIT_MAX = 10; // max requests per window
+
+export async function checkRateLimit(ip: string): Promise<boolean> {
+  const key = `ratelimit:${ip}`;
+  const count = await redisClient.incr(key);
+
+  if (count === 1) {
+    // First request - set TTL
+    await redisClient.expire(key, RATE_LIMIT_WINDOW_SEC);
+  }
+
+  return count <= RATE_LIMIT_MAX;
+}
 
 export async function saveJob(job: JobRecord): Promise<void> {
   const key = `job:${job.jobId}`;

@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import stream from 'stream';
+import { getFromRedis, saveToRedis } from './redisStore';
 
 const b64Key = process.env.GOOGLE_SERVICE_ACCOUNT_B64 || '';
 let jwtClient: any = null;
@@ -21,14 +22,31 @@ if (b64Key) {
 const drive = google.drive({ version: 'v3', auth: jwtClient });
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-// Folder cache to avoid repeated API calls
-const folderCache = new Map<string, string>();
+// Folder cache - check Redis first, fallback to in-memory
+const FOLDER_CACHE_TTL = 24 * 60 * 60; // 24 hours
+
+async function getCachedFolderId(folderPath: string): Promise<string | null> {
+  try {
+    const data = await getFromRedis(`folder:${folderPath}`);
+    return data?.folderId || null;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedFolderId(folderPath: string, folderId: string): Promise<void> {
+  try {
+    await saveToRedis({
+      key: `folder:${folderPath}`,
+      data: { folderId, cached: Date.now() },
+      ttl: FOLDER_CACHE_TTL
+    });
+  } catch (err) {
+    console.warn('[DriveClient] Failed to cache folder ID:', err.message);
+  }
+}
 
 export async function ensureFolderExists(folderPath: string): Promise<string> {
-  if (folderCache.has(folderPath)) {
-    return folderCache.get(folderPath)!;
-  }
-
   if (!jwtClient) throw new Error("Google Drive Auth not configured");
   if (!ROOT_FOLDER_ID) throw new Error("GOOGLE_DRIVE_FOLDER_ID missing");
 
@@ -39,10 +57,15 @@ export async function ensureFolderExists(folderPath: string): Promise<string> {
   for (const part of parts) {
     currentPath += `/${part}`;
 
-    if (folderCache.has(currentPath)) {
-      currentParentId = folderCache.get(currentPath)!;
+    // Check Redis cache first
+    const cachedId = await getCachedFolderId(currentPath);
+    if (cachedId) {
+      currentParentId = cachedId;
       continue;
     }
+
+    // Check in-memory cache as second-level cache
+    // (removed folderCache - using Redis only)
 
     const searchResponse = await drive.files.list({
       q: `name='${part}' and mimeType='application/vnd.google-apps.folder' and '${currentParentId}' in parents and trashed=false`,
@@ -66,7 +89,8 @@ export async function ensureFolderExists(folderPath: string): Promise<string> {
       folderId = createRes.data.id!;
     }
 
-    folderCache.set(currentPath, folderId);
+    // Cache in Redis for future requests
+    await setCachedFolderId(currentPath, folderId);
     currentParentId = folderId;
   }
 

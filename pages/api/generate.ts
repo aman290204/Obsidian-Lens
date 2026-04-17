@@ -14,6 +14,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createJob } from '../../src/lib/jobStore';
 import { MODELS } from '../../src/lib/nimClient';
 import { poolStatus } from '../../src/lib/nimKeyPool';
+import { checkRateLimit } from '../../src/lib/redisStore';
+import { z } from 'zod';
 
 export const config = {
   api: {
@@ -31,6 +33,14 @@ const VALID_LANGUAGES = [
 const CHAPTER_DURATION = 2;
 const MAX_CHAPTERS = 30;
 
+// Zod schema for input validation
+const GenerateSchema = z.object({
+  prompt: z.string().min(1).max(500).trim(),
+  language: z.enum(['hinglish', 'tanglish', 'tenglish', 'manglish', 'kanglish', 'benglish', 'marathlish', 'gujlish', 'urdu', 'odia', 'english']),
+  duration: z.number().min(1).max(60),
+  avatar: z.string().min(1).max(50),
+});
+
 // Simple userId generation (in production, use auth)
 function generateUserId(): string {
   return `user_${Date.now()}`;
@@ -41,22 +51,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { prompt, language, duration, avatar } = req.body ?? {};
+  // Rate limiting by IP (Redis-backed)
+  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
+             req.socket?.remoteAddress ||
+             'unknown';
+  const allowed = await checkRateLimit(ip);
+  if (!allowed) {
+    return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+  }
 
-  // Validation
-  if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 3) {
-    return res.status(400).json({ error: 'A meaningful prompt is required (min 3 chars).' });
+  // Zod validation
+  const validation = GenerateSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({
+      error: 'Invalid request',
+      details: validation.error.errors
+    });
   }
-  if (!VALID_LANGUAGES.includes(language)) {
-    return res.status(400).json({ error: `language must be one of: ${VALID_LANGUAGES.join(', ')}` });
-  }
-  const durationMins = Number(duration);
-  if (!Number.isFinite(durationMins) || durationMins < 1 || durationMins > 60) {
-    return res.status(400).json({ error: 'duration must be between 1 and 60 minutes.' });
-  }
-  if (!avatar || typeof avatar !== 'string') {
-    return res.status(400).json({ error: 'An avatar must be selected.' });
-  }
+
+  const { prompt, language, duration: durationMins, avatar } = validation.data;
 
   // Pool health check
   const pool = poolStatus();

@@ -28,6 +28,7 @@ export interface JobRecord {
   // Async Operation Tracking
   taskId:        string | null; // NVIDIA async task ID (if supported)
   error:         string | null;
+  retryCount:    number; // Track worker retries to prevent infinite loops
 
   // Timestamps
   createdAt:     number;
@@ -74,6 +75,7 @@ export async function createJob(params: {
     progress:      0,
     taskId:        null,
     error:         null,
+    retryCount:    0, // Initialize retry counter
     createdAt:     now,
     lastUpdated:   now,
     // Optional metadata
