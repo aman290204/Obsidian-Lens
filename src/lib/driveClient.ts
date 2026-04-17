@@ -19,18 +19,76 @@ if (b64Key) {
 }
 
 const drive = google.drive({ version: 'v3', auth: jwtClient });
-const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
+const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-export async function uploadVideoToDrive(fileName: string, buffer: Buffer): Promise<{ fileId: string; webContentLink: string; webViewLink: string }> {
+// Folder cache to avoid repeated API calls
+const folderCache = new Map<string, string>();
+
+export async function ensureFolderExists(folderPath: string): Promise<string> {
+  if (folderCache.has(folderPath)) {
+    return folderCache.get(folderPath)!;
+  }
+
+  if (!jwtClient) throw new Error("Google Drive Auth not configured");
+  if (!ROOT_FOLDER_ID) throw new Error("GOOGLE_DRIVE_FOLDER_ID missing");
+
+  const parts = folderPath.split('/').filter(Boolean);
+  let currentParentId = ROOT_FOLDER_ID;
+  let currentPath = '';
+
+  for (const part of parts) {
+    currentPath += `/${part}`;
+
+    if (folderCache.has(currentPath)) {
+      currentParentId = folderCache.get(currentPath)!;
+      continue;
+    }
+
+    const searchResponse = await drive.files.list({
+      q: `name='${part}' and mimeType='application/vnd.google-apps.folder' and '${currentParentId}' in parents and trashed=false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    });
+
+    let folderId: string;
+    if (searchResponse.data.files && searchResponse.data.files.length > 0) {
+      folderId = searchResponse.data.files[0].id!;
+    } else {
+      const fileMetadata = {
+        name: part,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [currentParentId],
+      };
+      const createRes = await drive.files.create({
+        requestBody: fileMetadata,
+        fields: 'id',
+      });
+      folderId = createRes.data.id!;
+    }
+
+    folderCache.set(currentPath, folderId);
+    currentParentId = folderId;
+  }
+
+  return currentParentId;
+}
+
+export async function uploadVideoToDrive(
+  fileName: string,
+  buffer: Buffer,
+  folderPath: string = '/'
+): Promise<{ fileId: string; webContentLink: string; webViewLink: string }> {
   if (!jwtClient) throw new Error("Google Drive Auth is not correctly configured.");
-  if (!FOLDER_ID) throw new Error("GOOGLE_DRIVE_FOLDER_ID is strictly missing from .env.local.");
+  if (!ROOT_FOLDER_ID) throw new Error("GOOGLE_DRIVE_FOLDER_ID is missing from .env.local.");
+
+  const targetFolderId = await ensureFolderExists(folderPath);
 
   const bufferStream = new stream.PassThrough();
   bufferStream.end(buffer);
 
   const fileMetadata = {
     name: fileName,
-    parents: [FOLDER_ID]
+    parents: [targetFolderId]
   };
 
   const media = {
@@ -38,7 +96,7 @@ export async function uploadVideoToDrive(fileName: string, buffer: Buffer): Prom
     body: bufferStream
   };
 
-  console.log(`[DriveClient] Uploading video ${fileName} to Drive...`);
+  console.log(`[DriveClient] Uploading ${fileName} to ${folderPath}`);
   const res = await drive.files.create({
     requestBody: fileMetadata,
     media: media,
@@ -49,24 +107,19 @@ export async function uploadVideoToDrive(fileName: string, buffer: Buffer): Prom
     throw new Error("Failed to capture a valid File ID after uploading video to Drive.");
   }
 
-  // Make the file publicly accessible so folks with link can download/view without being signed in 
   await drive.permissions.create({
     fileId: res.data.id,
-    requestBody: {
-      role: 'reader',
-      type: 'anyone'
-    }
+    requestBody: { role: 'reader', type: 'anyone' }
   });
 
-  // Fetch updated public links
   const updated = await drive.files.get({
     fileId: res.data.id,
     fields: 'webContentLink, webViewLink'
   });
 
   console.log(`[DriveClient] ✅ Upload complete: ${updated.data.webViewLink}`);
-  return { 
-    fileId: res.data.id, 
+  return {
+    fileId: res.data.id,
     webContentLink: updated.data.webContentLink || '',
     webViewLink: updated.data.webViewLink || ''
   };

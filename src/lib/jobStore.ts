@@ -1,51 +1,51 @@
 /**
- * In-memory job store
+ * Job Store - Final Architecture (Step-Based State Machine)
  * ─────────────────────────────────────────────────────────────────────────────
- * Tracks the state of every video generation job within the Node.js process.
- * In production, replace with Redis or a database for persistence across
- * Vercel serverless function instances.
+ * Jobs are stored in Redis with a flat schema optimized for stateless workers.
+ * Each worker invocation moves the job forward ONE STEP, then re-triggers itself.
  *
- * Each job progresses through phases:
- *   QUEUED → SCRIPTING → SYNTHESISING → AVATAR → COMPOSITING → DONE | FAILED
+ * Job Stages:
+ *   starting     → job created, waiting to start NVIDIA
+ *   generating   → NVIDIA is producing video (multiple sub-steps)
+ *   uploading    → pushing final video to Google Drive
+ *   done         → complete, Drive link ready
+ *   failed       → error occurred
  */
 
-export type JobPhase =
-  | 'QUEUED'
-  | 'SCRIPTING'
-  | 'SYNTHESISING'
-  | 'AVATAR'
-  | 'COMPOSITING'
-  | 'DONE'
-  | 'FAILED';
-
-export interface ChapterStatus {
-  index:    number;
-  phase:    JobPhase;
-  title?:   string;
-  progress: number; // 0–100 within this chapter
-}
+export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export type JobStage = 'starting' | 'generating' | 'uploading' | 'done';
 
 export interface JobRecord {
+  // Identity
   jobId:         string;
-  prompt:        string;
-  language:      string;
-  durationMins:  number;
-  avatarId:      string;
-  totalChapters: number;
+  userId:        string; // for folder organization
 
-  phase:         JobPhase;
-  overallProgress: number; // 0–100
+  // State Machine
+  status:        JobStatus;
+  stage:         JobStage;
+  progress:      number; // 0-100 overall
 
-  chapters:      ChapterStatus[];
-  startedAt:     number;
-  updatedAt:     number;
-  completedAt?:  number;
+  // Async Operation Tracking
+  taskId:        string | null; // NVIDIA async task ID (if supported)
+  error:         string | null;
 
-  videoId?:      string;  // local ID
-  driveLink?:    string;  // Google Drive url
-  errorMessage?: string;  // set when FAILED
+  // Timestamps
+  createdAt:     number;
+  lastUpdated:   number;
 
-  models: {
+  // Metadata (for reference)
+  prompt?:       string;
+  language?:     string;
+  durationMins?: number;
+  avatarId?:     string;
+  totalChapters?: number;
+
+  // Output
+  url?:          string;  // Google Drive download link
+  videoId?:      string;  // local tracking ID
+
+  // Technical
+  models?: {
     llm:    string;
     tts:    string;
     avatar: string;
@@ -58,24 +58,30 @@ import { saveJob as saveToRedis, getJob as getFromRedis, listJobs as listFromRed
 // ── CRUD helpers (Persisted via Redis) ───────────────────────────────────────
 export async function createJob(params: {
   jobId:        string;
-  prompt:       string;
-  language:     string;
-  durationMins: number;
-  avatarId:     string;
-  totalChapters: number;
+  userId:       string;
+  prompt?:      string;
+  language?:    string;
+  durationMins?: number;
+  avatarId?:    string;
+  totalChapters?: number;
 }): Promise<JobRecord> {
   const now = Date.now();
   const record: JobRecord = {
-    ...params,
-    phase:           'QUEUED',
-    overallProgress: 0,
-    chapters: Array.from({ length: params.totalChapters }, (_, i) => ({
-      index:    i,
-      phase:    'QUEUED',
-      progress: 0,
-    })),
-    startedAt: now,
-    updatedAt: now,
+    jobId:         params.jobId,
+    userId:        params.userId,
+    status:        'queued',
+    stage:         'starting',
+    progress:      0,
+    taskId:        null,
+    error:         null,
+    createdAt:     now,
+    lastUpdated:   now,
+    // Optional metadata
+    prompt:        params.prompt,
+    language:      params.language,
+    durationMins:  params.durationMins,
+    avatarId:      params.avatarId,
+    totalChapters: params.totalChapters,
     models: {
       llm:          process.env.NIM_LLM_PRIMARY  || 'qwen/qwen3.5-122b-a10b',
       tts:          process.env.NIM_TTS_PRIMARY  || 'magpie-tts-multilingual',
@@ -96,44 +102,39 @@ export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promi
   const job = await getFromRedis(jobId);
   if (!job) return undefined;
 
-  const updated: JobRecord = { ...job, ...patch, updatedAt: Date.now() };
+  const updated: JobRecord = { ...job, ...patch, lastUpdated: Date.now() };
   await saveToRedis(updated);
   return updated;
 }
 
-export async function updateChapter(
-  jobId: string,
-  chapterIndex: number,
-  patch: Partial<ChapterStatus>
-): Promise<JobRecord | undefined> {
-  const job = await getFromRedis(jobId);
-  if (!job) return undefined;
-
-  const chapters = [...job.chapters];
-  chapters[chapterIndex] = { ...chapters[chapterIndex], ...patch };
-
-  const overallProgress = Math.round(
-    chapters.reduce((sum, c) => sum + c.progress, 0) / chapters.length
-  );
-
-  return await updateJob(jobId, { chapters, overallProgress });
+// Step-based completion helpers (no chapters in new schema)
+export async function markJobProcessing(jobId: string, stage: JobStage, progress: number, taskId?: string): Promise<JobRecord | undefined> {
+  const updates: Partial<JobRecord> = {
+    status: 'processing',
+    stage,
+    progress,
+    lastUpdated: Date.now(),
+  };
+  if (taskId) updates.taskId = taskId;
+  return await updateJob(jobId, updates);
 }
 
-export async function setJobDone(jobId: string, videoId: string, driveLink: string): Promise<JobRecord | undefined> {
+export async function markJobCompleted(jobId: string, url: string, videoId?: string): Promise<JobRecord | undefined> {
   return await updateJob(jobId, {
-    phase:           'DONE',
-    overallProgress: 100,
+    status: 'completed',
+    stage: 'done',
+    progress: 100,
+    url,
     videoId,
-    driveLink,
-    completedAt:     Date.now(),
+    lastUpdated: Date.now(),
   });
 }
 
-export async function setJobFailed(jobId: string, errorMessage: string): Promise<JobRecord | undefined> {
+export async function markJobFailed(jobId: string, error: string): Promise<JobRecord | undefined> {
   return await updateJob(jobId, {
-    phase:        'FAILED',
-    errorMessage,
-    completedAt:  Date.now(),
+    status: 'failed',
+    error,
+    lastUpdated: Date.now(),
   });
 }
 

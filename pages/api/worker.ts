@@ -1,36 +1,26 @@
 /**
- * POST /api/worker
- * ─────────────────────────────────────────────────────────────────────────────
- * Background worker endpoint that executes the video generation pipeline.
- * This endpoint is designed to run in a separate Vercel function or background
- * worker process, isolated from the request/response cycle of /api/generate.
- *
- * Expected body: { jobId: string }
- *
- * This worker:
- * 1. Fetches job details from Redis
- * 2. Runs the full pipeline: script → TTS → avatar → composite → Drive upload
- * 3. Updates job status in Redis throughout
- * 4. Handles errors gracefully and marks job as FAILED on any pipeline error
+ * POST /api/worker - Step-Based State Machine
+ * Each invocation moves the job forward ONE STEP, then re-triggers itself.
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getJob, updateJob, updateChapter, setJobDone, setJobFailed } from '../../src/lib/jobStore';
-import {
-  generateScript, synthesiseSpeech, renderAvatar,
-} from '../../src/lib/nimClient';
+import { getJob, updateJob, markJobCompleted, markJobFailed } from '../../src/lib/jobStore';
+import { generateScript, synthesiseSpeech, renderAvatar } from '../../src/lib/nimClient';
 import { compositeVideo } from '../../src/lib/ffmpegCompositor';
-import { uploadVideoToDrive } from '../../src/lib/driveClient';
+import { uploadVideoToDrive, ensureFolderExists } from '../../src/lib/driveClient';
+import { getFromRedis, saveToRedis } from '../../src/lib/redisStore';
 
-// Allow longer execution for video processing (Vercel Pro: 5min, Enterprise: 15min)
-export const config = {
-  api: {
-    bodyParser: true,
-    externalResolver: true, // suppress "resolved without sending response" warning
-  },
-};
+export const config = { api: { bodyParser: true, externalResolver: true } };
 
-const CHAPTER_DURATION = 2; // minutes per chapter (must match generate.ts)
+const CHAPTER_DURATION = 2;
+const WORKER_TIMEOUT_MS = 2 * 60 * 1000;
+
+function getFolderPath(userId: string): string {
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const dd = String(now.getDate()).padStart(2,'0');
+  return `/videos/${ym}/${dd}/${userId}/`;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -38,112 +28,193 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { jobId } = req.body ?? {};
-
   if (!jobId || typeof jobId !== 'string') {
     return res.status(400).json({ error: 'jobId is required' });
   }
 
   try {
-    // ── Fetch job details ───────────────────────────────────────────────────
     const job = await getJob(jobId);
     if (!job) {
       return res.status(404).json({ error: `Job ${jobId} not found` });
     }
 
-    console.log(`[Worker] Starting job ${jobId}: ${job.totalChapters} chapters`);
-
-    // Mark as processing (phase not status) - using SCRIPTING as first phase
-    await updateJob(jobId, { phase: 'SCRIPTING' as const });
-
-    const chapterBuffers: Buffer[] = new Array(job.totalChapters);
-
-    // ── Process chapters in parallel batches ─────────────────────────────────
-    const concurrency = Math.min(job.totalChapters, 5); // max 5 concurrent
-    const indexes = Array.from({ length: job.totalChapters }, (_, i) => i);
-
-    for (let batchStart = 0; batchStart < job.totalChapters; batchStart += concurrency) {
-      const batch = indexes.slice(batchStart, batchStart + concurrency);
-
-      await Promise.all(batch.map(async (chIdx) => {
-        try {
-          // Phase 1: Scripting
-          await updateChapter(jobId, chIdx, { phase: 'SCRIPTING', progress: 10 });
-
-          const script = await generateScript({
-            topic:         job.prompt,
-            language:      job.language as any,
-            durationMins:  CHAPTER_DURATION,
-            chapterIndex:  chIdx,
-            totalChapters: job.totalChapters,
-          });
-
-          await updateChapter(jobId, chIdx, { phase: 'SYNTHESISING', progress: 35, title: script.title });
-
-          // Phase 2: TTS
-          const tts = await synthesiseSpeech({ text: script.script, language: job.language });
-
-          await updateChapter(jobId, chIdx, { phase: 'AVATAR', progress: 65 });
-
-          // Phase 3: Avatar
-          const avatar = await renderAvatar({
-            audioBase64:  tts.audioBase64,
-            avatarId:    job.avatarId,
-            emotionStyle: 'engaged',
-          });
-
-          // Chapter complete
-          await updateChapter(jobId, chIdx, { phase: 'DONE', progress: 100 });
-
-          // Store model info from first chapter
-          if (chIdx === 0) {
-            await updateJob(jobId, {
-              models: {
-                llm:          script.model,
-                tts:          tts.model,
-                avatar:       avatar.model,
-                usedFallback: script.usedFallback || tts.usedFallback,
-              },
-            });
-          }
-
-          chapterBuffers[chIdx] = Buffer.from(avatar.videoBase64, 'base64');
-          console.log(`[Worker] ${jobId}: Chapter ${chIdx + 1}/${job.totalChapters} ✓`);
-
-        } catch (err: any) {
-          console.error(`[Worker] ${jobId}: Chapter ${chIdx + 1} failed — ${err.message}`);
-          await updateChapter(jobId, chIdx, { phase: 'FAILED', progress: 0 });
-          throw err; // abort entire job
-        }
-      }));
+    // Idempotency guard
+    if (job.status === 'completed') {
+      return res.json({ ok: true, reason: 'already completed' });
     }
 
-    // Verify all chapters completed
-    const updatedJob = await getJob(jobId);
-    if (!updatedJob || updatedJob.chapters.some(ch => ch.phase === 'FAILED')) {
-      throw new Error('One or more chapters failed');
+    // Timeout guard
+    if (Date.now() - job.lastUpdated > WORKER_TIMEOUT_MS) {
+      await markJobFailed(jobId, 'Worker timeout - job stalled');
+      return res.json({ ok: true, reason: 'timeout' });
     }
 
-    // ── Compositing ─────────────────────────────────────────────────────────
-    console.log(`[Worker] ${jobId}: Compositing ${job.totalChapters} chapters...`);
-    await updateJob(jobId, { phase: 'COMPOSITING' as const });
+    // State machine
+    if (job.stage === 'starting') {
+      await handleStarting(job);
+    } else if (job.stage === 'generating') {
+      await handleGenerating(job);
+    } else if (job.stage === 'uploading') {
+      await handleUploading(job);
+    } else {
+      await markJobFailed(jobId, `Unknown stage: ${job.stage}`);
+      return res.status(500).json({ error: 'Invalid job stage' });
+    }
 
-    const finalVideoBuffer = await compositeVideo(chapterBuffers);
-
-    // ── Upload to Google Drive ───────────────────────────────────────────────
-    console.log(`[Worker] ${jobId}: Uploading to Google Drive...`);
-    const fileName = `obsidian-${jobId}.mp4`;
-    const gDriveData = await uploadVideoToDrive(fileName, finalVideoBuffer);
-
-    // ── Complete ────────────────────────────────────────────────────────────
-    const videoId = `video-${jobId}-${Date.now()}`;
-    await setJobDone(jobId, videoId, gDriveData.webContentLink || gDriveData.webViewLink);
-
-    console.log(`[Worker] ${jobId}: Complete → ${videoId}`);
-    res.json({ success: true, videoId, driveLink: gDriveData.webContentLink });
+    return res.json({ ok: true });
 
   } catch (err: any) {
-    console.error(`[Worker] Job ${jobId} failed:`, err);
-    await setJobFailed(jobId, err.message || 'Unknown worker error');
-    res.status(500).json({ error: err.message || 'Pipeline failed' });
+    console.error(`[Worker] Job ${jobId} error:`, err);
+    await markJobFailed(jobId, err.message || 'Unknown worker error');
+    return res.status(500).json({ error: err.message || 'Pipeline failed' });
   }
+}
+
+async function handleStarting(job: any) {
+  const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
+  
+  await updateJob(job.jobId, {
+    stage: 'generating',
+    progress: 5,
+    lastUpdated: Date.now(),
+  });
+
+  console.log(`[Worker] ${job.jobId}: Starting generation (${totalChapters} chapters)`);
+  await selfTrigger(job.jobId);
+}
+
+async function handleGenerating(job: any) {
+  const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
+  
+  // Check if we have chapter results stored
+  const chapterBuffers: Buffer[] = new Array(totalChapters);
+  let startChapter = 0;
+  
+  for (let i = 0; i < totalChapters; i++) {
+    const chapterData = await getChapterResult(job.jobId, i);
+    if (chapterData?.videoBase64) {
+      chapterBuffers[i] = Buffer.from(chapterData.videoBase64, 'base64');
+      startChapter = i + 1;
+    }
+  }
+
+  console.log(`[Worker] ${job.jobId}: Resuming from chapter ${startChapter + 1}/${totalChapters}`);
+
+  // Process remaining chapters one at a time
+  for (let chIdx = startChapter; chIdx < totalChapters; chIdx++) {
+    try {
+      await updateJob(job.jobId, {
+        progress: Math.round((chIdx / totalChapters) * 60) + 5,
+        lastUpdated: Date.now(),
+      });
+
+      // Generate
+      const script = await generateScript({
+        topic: job.prompt || 'Untitled',
+        language: (job.language as any) || 'english',
+        durationMins: CHAPTER_DURATION,
+        chapterIndex: chIdx,
+        totalChapters,
+      });
+
+      // TTS
+      const tts = await synthesiseSpeech({ text: script.script, language: job.language || 'english' });
+
+      // Avatar
+      const avatar = await renderAvatar({
+        audioBase64: tts.audioBase64,
+        avatarId: job.avatarId || 'ethan',
+        emotionStyle: 'engaged',
+      });
+
+      // Store chapter result
+      await saveChapterResult(job.jobId, chIdx, {
+        videoBase64: avatar.videoBase64,
+        script: script.script,
+        title: script.title,
+        completedAt: Date.now(),
+      });
+
+      console.log(`[Worker] ${job.jobId}: Chapter ${chIdx + 1}/${totalChapters} done`);
+
+      // Re-trigger to continue (avoid timeout)
+      if (chIdx < totalChapters - 1) {
+        await selfTrigger(job.jobId);
+        return;
+      }
+
+    } catch (err: any) {
+      console.error(`[Worker] ${job.jobId}: Chapter ${chIdx + 1} failed:`, err.message);
+      await markJobFailed(job.jobId, `Chapter ${chIdx + 1} failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // All chapters complete
+  await updateJob(job.jobId, {
+    stage: 'uploading',
+    progress: 70,
+    lastUpdated: Date.now(),
+  });
+
+  await selfTrigger(job.jobId);
+}
+
+async function handleUploading(job: any) {
+  const totalChapters = job.totalChapters || Math.ceil((job.durationMins || 15) / CHAPTER_DURATION);
+  
+  // Load all chapter buffers
+  const chapterBuffers: Buffer[] = [];
+  for (let i = 0; i < totalChapters; i++) {
+    const chapterData = await getChapterResult(job.jobId, i);
+    if (!chapterData?.videoBase64) {
+      throw new Error(`Missing chapter ${i} data`);
+    }
+    chapterBuffers.push(Buffer.from(chapterData.videoBase64, 'base64'));
+  }
+
+  await updateJob(job.jobId, { progress: 75, lastUpdated: Date.now() });
+
+  // Composite
+  console.log(`[Worker] ${job.jobId}: Compositing...`);
+  const finalVideoBuffer = await compositeVideo(chapterBuffers);
+
+  await updateJob(job.jobId, { progress: 85, lastUpdated: Date.now() });
+
+  // Upload with organized folder structure
+  const folderPath = getFolderPath(job.userId);
+  await ensureFolderExists(folderPath);
+
+  const fileName = `${job.jobId}.mp4`;
+  const driveUrl = await uploadVideoToDrive(fileName, finalVideoBuffer, folderPath);
+
+  await updateJob(job.jobId, { progress: 95, lastUpdated: Date.now() });
+
+  // Complete
+  await markJobCompleted(job.jobId, driveUrl);
+  console.log(`[Worker] ${job.jobId}: Complete → ${driveUrl}`);
+}
+
+async function selfTrigger(jobId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+  try {
+    await fetch(`${baseUrl}/api/worker`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('[Worker] Self-trigger failed:', err);
+  }
+}
+
+// Chapter storage
+async function saveChapterResult(jobId: string, chapterIndex: number, data: any) {
+  const key = `job:${jobId}:chapter:${chapterIndex}`;
+  await saveToRedis({ ...data, jobId, chapterIndex } as any);
+}
+
+async function getChapterResult(jobId: string, chapterIndex: number) {
+  const key = `job:${jobId}:chapter:${chapterIndex}`;
+  return await getFromRedis(key);
 }
