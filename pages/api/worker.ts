@@ -232,42 +232,64 @@ async function handleUploading(job: any) {
   await ensureFolderExists(folderPath);
 
   const fileName = `${job.jobId}.mp4`;
-  const driveUrl = await uploadVideoToDrive(fileName, finalVideoBuffer, folderPath);
+  const driveResult = await uploadVideoToDrive(fileName, finalVideoBuffer, folderPath);
 
   await updateJob(job.jobId, { progress: 95, lastUpdated: Date.now() });
 
-  // Complete
-  await markJobCompleted(job.jobId, driveUrl);
-  logJobEvent(job.jobId, 'completed', `Video ready`, { driveUrl });
+  // Complete - use webContentLink for direct download
+  await markJobCompleted(job.jobId, driveResult.webContentLink, driveResult.fileId);
+  logJobEvent(job.jobId, 'completed', `Video ready`, { driveUrl: driveResult.webViewLink });
 }
 
 async function selfTrigger(jobId: string): Promise<boolean> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://localhost:${process.env.PORT || 3000}`;
+  const MAX_ATTEMPTS = 3;
 
-  try {
-    const res = await fetch(`${baseUrl}/api/worker`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
-    });
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(`${baseUrl}/api/worker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
 
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => 'Unknown error');
-      throw new Error(`HTTP ${res.status}: ${errorText}`);
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => 'Unknown error');
+        const msg = `HTTP ${res.status}: ${errorText}`;
+
+        if (attempt < MAX_ATTEMPTS) {
+          const delay = 1000 * attempt; // exponential backoff: 1s, 2s, 3s
+          logJobEvent(jobId, 'warning', `Self-trigger attempt ${attempt} failed, retrying in ${delay}ms`, { error: msg });
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        logJobEvent(jobId, 'error', `Self-trigger failed after ${MAX_ATTEMPTS} attempts`, { error: msg });
+        return false;
+      }
+
+      logJobEvent(jobId, 'trigger', `Self-trigger successful (attempt ${attempt})`);
+      return true;
+    } catch (err: any) {
+      if (attempt < MAX_ATTEMPTS) {
+        const delay = 1000 * attempt;
+        logJobEvent(jobId, 'warning', `Self-trigger network error (attempt ${attempt}), retrying`, { error: err.message });
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      logJobEvent(jobId, 'error', `Self-trigger failed after ${MAX_ATTEMPTS} attempts`, { error: err.message });
+      return false;
     }
-
-    logJobEvent(jobId, 'trigger', `Self-trigger successful`);
-    return true;
-  } catch (err: any) {
-    logJobEvent(jobId, 'error', `Self-trigger failed`, { error: err.message });
-    return false;
   }
+
+  return false;
 }
 
 // Chapter storage
 async function saveChapterResult(jobId: string, chapterIndex: number, data: any) {
   const key = `job:${jobId}:chapter:${chapterIndex}`;
-  await saveToRedis({ ...data, jobId, chapterIndex } as any);
+  await saveToRedis(key, { ...data, jobId, chapterIndex });
 }
 
 async function getChapterResult(jobId: string, chapterIndex: number) {

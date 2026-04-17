@@ -55,9 +55,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const ip = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
              req.socket?.remoteAddress ||
              'unknown';
-  const allowed = await checkRateLimit(ip);
-  if (!allowed) {
-    return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+  try {
+    const allowed = await checkRateLimit(ip);
+    if (!allowed) {
+      return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+  } catch (err) {
+    // Redis unavailable - fail closed to prevent abuse
+    console.error('[RateLimit] Redis unavailable:', err);
+    return res.status(503).json({ error: 'Rate limiter unavailable. Please try again later.' });
   }
 
   // Zod validation

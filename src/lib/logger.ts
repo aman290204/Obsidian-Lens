@@ -8,13 +8,6 @@ export const logger = pino({
     service: 'obsidian-lens',
     timestamp: () => new Date().toISOString(),
   },
-  formatter: (label, log) => {
-    // Simplify log format
-    return {
-      ...log,
-      _labels: { ...log._labels, module: label },
-    };
-  },
   transport: isProduction ? {
     target: 'pino-pretty',
     options: {

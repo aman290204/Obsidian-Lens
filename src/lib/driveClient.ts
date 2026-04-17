@@ -36,11 +36,7 @@ async function getCachedFolderId(folderPath: string): Promise<string | null> {
 
 async function setCachedFolderId(folderPath: string, folderId: string): Promise<void> {
   try {
-    await saveToRedis({
-      key: `folder:${folderPath}`,
-      data: { folderId, cached: Date.now() },
-      ttl: FOLDER_CACHE_TTL
-    });
+    await saveToRedis(`folder:${folderPath}`, { folderId, cached: Date.now() }, FOLDER_CACHE_TTL);
   } catch (err) {
     console.warn('[DriveClient] Failed to cache folder ID:', err.message);
   }

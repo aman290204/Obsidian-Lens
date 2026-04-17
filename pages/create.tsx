@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import AppLayout from '../src/components/AppLayout';
+import { playSampleAudio, stopSampleAudio, getSampleAudio } from '../src/lib/sampleAudio';
 
 const AVATARS = [
   { id: 'ethan',  name: 'Ethan (Pro)',  gradient: 'linear-gradient(135deg, #7c3aed, #4f46e5)', initials: 'ET' },
@@ -43,6 +44,8 @@ export default function CreatePage() {
     healthy: number; total: number; rpm: number;
     stack: { primary: { llm: string; tts: string }; fallback: { llm: string; tts: string } };
   } | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const audioTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Poll pool status every 15s
   useEffect(() => {
@@ -79,6 +82,48 @@ export default function CreatePage() {
   }, [prompt, language, duration, avatar, router]);
 
   const durationMarks = [5, 10, 15, 30, 45, 60];
+
+  // Handle preview playback
+  const playPreview = useCallback(async (persona: string, lang: string) => {
+    if (isPlayingPreview) {
+      stopSampleAudio();
+      setIsPlayingPreview(false);
+      return;
+    }
+
+    const success = await playSampleAudio(persona, lang);
+    if (success) {
+      setIsPlayingPreview(true);
+      // Auto-stop after 4 seconds (sample duration)
+      if (audioTimeoutRef.current) clearTimeout(audioTimeoutRef.current);
+      audioTimeoutRef.current = setTimeout(() => {
+        stopSampleAudio();
+        setIsPlayingPreview(false);
+      }, 4000);
+    }
+  }, [isPlayingPreview]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (audioTimeoutRef.current) clearTimeout(audioTimeoutRef.current);
+      stopSampleAudio();
+    };
+  }, []);
+
+  // Handle avatar change with preview
+  const handleAvatarChange = useCallback((newAvatar: string) => {
+    setAvatar(newAvatar);
+    // Play preview for current language
+    playPreview(newAvatar, language);
+  }, [language, playPreview]);
+
+  // Handle language change with preview
+  const handleLanguageChange = useCallback((newLanguage: string) => {
+    setLanguage(newLanguage);
+    // Play preview for current avatar
+    playPreview(avatar, newLanguage);
+  }, [avatar, playPreview]);
 
   return (
     <AppLayout>
@@ -188,31 +233,43 @@ export default function CreatePage() {
                 style={{ border: '1px solid rgba(45,47,69,0.7)', background: 'rgba(13,15,26,0.7)' }}
               >
                 <div className="max-h-52 overflow-y-auto no-scrollbar">
-                  {LANGUAGES.map(l => (
-                    <button
-                      key={l.value}
-                      type="button"
-                      onClick={() => setLanguage(l.value)}
-                      className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-all"
-                      style={
-                        language === l.value
-                          ? { background: 'rgba(124,58,237,0.2)', color: 'var(--color-primary)', fontWeight: 600 }
-                          : { color: 'var(--color-on-surface-variant)' }
-                      }
-                    >
-                      <span>{l.label}</span>
-                      <span className="flex items-center gap-2">
-                        {l.badge && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full" style={{ background:'rgba(34,211,238,0.15)', color:'#22d3ee' }}>
-                            {l.badge}
-                          </span>
-                        )}
-                        {language === l.value && (
-                          <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
-                        )}
-                      </span>
-                    </button>
-                  ))}
+                  {LANGUAGES.map(l => {
+                    const hasPreview = getSampleAudio(avatar, l.value);
+                    const isLangPreviewActive = isPlayingPreview && language === l.value;
+                    return (
+                      <button
+                        key={l.value}
+                        type="button"
+                        onClick={() => handleLanguageChange(l.value)}
+                        className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-all relative"
+                        style={
+                          language === l.value
+                            ? { background: 'rgba(124,58,237,0.2)', color: 'var(--color-primary)', fontWeight: 600 }
+                            : { color: 'var(--color-on-surface-variant)' }
+                        }
+                      >
+                        <span>{l.label}</span>
+                        <span className="flex items-center gap-2">
+                          {l.badge && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full" style={{ background:'rgba(34,211,238,0.15)', color:'#22d3ee' }}>
+                              {l.badge}
+                            </span>
+                          )}
+                          {/* Playable indicator */}
+                          {hasPreview && (
+                            <span className={`text-xs transition-all ${isLangPreviewActive ? 'text-cyan-400' : 'text-on-surface-variant/50'}`}>
+                              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings:"'FILL' 1" }}>
+                                {isLangPreviewActive ? 'volume_up' : 'play_circle'}
+                              </span>
+                            </span>
+                          )}
+                          {language === l.value && !hasPreview && (
+                            <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -257,12 +314,13 @@ export default function CreatePage() {
             <div className="flex gap-5 overflow-x-auto no-scrollbar pb-2">
               {AVATARS.map(av => {
                 const selected = avatar === av.id;
+                const isPreviewActive = isPlayingPreview && avatar === av.id;
                 return (
                   <button
                     key={av.id}
                     type="button"
-                    onClick={() => setAvatar(av.id)}
-                    className="flex-none flex flex-col items-center group"
+                    onClick={() => handleAvatarChange(av.id)}
+                    className="flex-none flex flex-col items-center group relative"
                   >
                     <div
                       className="relative w-20 h-20 rounded-full p-0.5 transition-all duration-200"
@@ -274,12 +332,18 @@ export default function CreatePage() {
                       }}
                     >
                       <div
-                        className="w-full h-full rounded-full flex items-center justify-center text-white font-bold text-lg"
+                        className="w-full h-full rounded-full flex items-center justify-center text-white font-bold text-lg relative"
                         style={{ background: av.gradient }}
                       >
                         {av.initials}
+                        {/* Play indicator overlay */}
+                        {isPreviewActive && (
+                          <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/40 animate-pulse">
+                            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>volume_up</span>
+                          </div>
+                        )}
                       </div>
-                      {selected && (
+                      {selected && !isPreviewActive && (
                         <div className="absolute inset-0 rounded-full flex items-center justify-center" style={{ background:'rgba(34,211,238,0.2)' }}>
                           <span className="material-symbols-outlined text-cyan-400 text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
                         </div>
