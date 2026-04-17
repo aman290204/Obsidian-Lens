@@ -100,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   // Trigger worker asynchronously (non-blocking)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://localhost:${process.env.PORT || 3000}`;
   fetch(`${baseUrl}/api/worker`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -196,7 +196,7 @@ async function handleUploading(job: any) {
 }
 
 async function selfTrigger(jobId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://localhost:${process.env.PORT || 3000}`;
   try {
     await fetch(`${baseUrl}/api/worker`, {
       method: 'POST',
