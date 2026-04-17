@@ -346,77 +346,132 @@ export interface TTSResult {
   usedFallback: boolean;
 }
 
+// ── Sarvam AI Language + Speaker mapping ─────────────────────────────────────
+const SARVAM_LANG_MAP: Record<string, string> = {
+  'hi-IN': 'hi-IN', 'ta-IN': 'ta-IN', 'te-IN': 'te-IN',
+  'ml-IN': 'ml-IN', 'mr-IN': 'mr-IN', 'bn-IN': 'bn-IN',
+  'kn-IN': 'kn-IN', 'gu-IN': 'gu-IN', 'ur-IN': 'hi-IN',
+  'or-IN': 'od-IN', 'en-IN': 'en-IN',
+};
+
+function getSarvamVoice(avatarId: string, locale: string): { speaker: string; langCode: string } {
+  const persona  = PERSONA_VOICE_MAP[avatarId] ?? PERSONA_VOICE_MAP['maya'];
+  const isFemale = persona.gender === 'female';
+  const langCode = SARVAM_LANG_MAP[locale] ?? 'hi-IN';
+  const speaker  = langCode === 'en-IN'
+    ? (isFemale ? 'diya'  : 'neel')
+    : (isFemale ? 'meera' : 'arvind');
+  return { speaker, langCode };
+}
+
+/** Concatenate Sarvam's per-chunk WAV base64 array into a single valid WAV. */
+function concatWavBase64(b64s: string[]): string {
+  if (b64s.length === 1) return b64s[0];
+  const WAV_HDR = 44;
+  // Decode all chunks and extract PCM data (skip WAV headers after first)
+  const decoded = b64s.map(b => new Uint8Array(Buffer.from(b, 'base64').buffer));
+  const pcms    = decoded.map(u => u.subarray(WAV_HDR));
+  const total   = pcms.reduce((s, p) => s + p.length, 0);
+  // Build output: first header + all PCM data
+  const out = new Uint8Array(WAV_HDR + total);
+  out.set(decoded[0].subarray(0, WAV_HDR), 0);  // copy first WAV header
+  // Fix RIFF sizes in-place (little-endian uint32)
+  const view = new DataView(out.buffer);
+  view.setUint32(4,  total + 36, true);  // ChunkSize
+  view.setUint32(40, total,      true);  // Subchunk2Size
+  let cursor = WAV_HDR;
+  for (const pcm of pcms) { out.set(pcm, cursor); cursor += pcm.length; }
+  return Buffer.from(out).toString('base64');
+}
+
+/** Sarvam AI REST TTS — primary. Chunks text at 500 chars, one batched request. */
+async function synthesiseSarvam(opts: TTSOptions): Promise<string> {
+  const key = process.env.SARVAM_API_KEY;
+  if (!key) throw new Error('SARVAM_API_KEY not set');
+
+  const langConfig            = LANGUAGE_CONFIG[opts.language] || LANGUAGE_CONFIG.english;
+  const { speaker, langCode } = getSarvamVoice(opts.avatarId ?? 'maya', langConfig.locale);
+  const safeText = opts.text.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, ' ');
+  const chunks: string[] = [];
+  for (let i = 0; i < safeText.length; i += 500) chunks.push(safeText.slice(i, i + 500));
+
+  const res = await fetch('https://api.sarvam.ai/text-to-speech', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'api-subscription-key': key },
+    body: JSON.stringify({
+      inputs: chunks, target_language_code: langCode, speaker,
+      pitch: 0, pace: 1.0, loudness: 1.5, speech_sample_rate: 22050,
+      enable_preprocessing: true, model: 'bulbul:v1',
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Sarvam TTS HTTP ${res.status}: ${err.slice(0, 200)}`);
+  }
+  const json   = await res.json();
+  const audios = json.audios as string[] ?? [];
+  if (!audios.length) throw new Error('Sarvam TTS returned no audio');
+  console.info(`[Sarvam TTS] ✅ ${speaker} | lang: ${langCode} | chunks: ${chunks.length}`);
+  return concatWavBase64(audios);
+}
+
+/** Magpie NVCF pexec — fallback. FnId: 877104f7-e885-42b9-8de8-f6e4c6303969 */
+async function synthesiseMagpie(text: string, locale: string, voice: string, apiKey: string): Promise<string> {
+  const res = await fetch(`${NVCF_URL}/${MODELS.tts.primaryFnId}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      text: text.slice(0, 4000), language_code: locale,
+      encoding: 'LINEAR_PCM', sample_rate_hz: 22050, voice_name: voice,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    reportFailure(apiKey, res.status);
+    throw new Error(`Magpie NVCF HTTP ${res.status}`);
+  }
+  const json = await res.json();
+  const b64  = json.audio || json.audioContent || '';
+  if (!b64) throw new Error('Magpie NVCF returned no audio field');
+  reportSuccess(apiKey);
+  return b64;
+}
+
 /**
- * Magpie-Multilingual TTS via NVCF pexec REST shim.
- *
- * gRPC is not available in Vercel serverless. Instead, NVIDIA exposes
- * every NVCF function (including gRPC ones) through a REST gateway:
- *   POST https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/<fnId>
- *
- * The request body mirrors the Riva SynthesizeSpeechRequest proto as JSON.
- * The response body contains { "audio": "<base64 WAV>" }.
- *
- * Function ID (Magpie Multilingual): 877104f7-e885-42b9-8de8-f6e4c6303969
- * Override via NIM_TTS_PRIMARY_FN_ID env var.
+ * Primary:  Sarvam AI (REST, Indian language specialist, full-length via chunking)
+ * Fallback: Magpie-Multilingual via NVCF pexec → en-IN voice
  */
 export async function synthesiseSpeech(opts: TTSOptions): Promise<TTSResult> {
   const langConfig    = LANGUAGE_CONFIG[opts.language] || LANGUAGE_CONFIG.english;
   const primaryVoice  = opts.voice ?? getMagpieVoice(opts.avatarId ?? 'maya', langConfig.locale);
   const fallbackVoice = getMagpieVoice(opts.avatarId ?? 'maya', 'en-IN');
-  const fnId          = MODELS.tts.primaryFnId;
 
-  if (!fnId) throw new Error('NIM_TTS_PRIMARY_FN_ID is not configured and no default is set.');
+  // Primary: Sarvam AI
+  try {
+    const b64 = await synthesiseSarvam(opts);
+    return { audioBase64: b64, model: 'sarvam-ai/bulbul:v1', usedFallback: false };
+  } catch (e: any) {
+    console.warn(`[TTS] Sarvam failed: ${e.message} — trying Magpie NVCF`);
+  }
 
-  for (const [voice, langCode, isFallback] of [
-    [primaryVoice,  langConfig.locale, false],
-    [fallbackVoice, 'en-IN',           true ],
-  ] as [string, string, boolean][]) {
+  // Fallback: Magpie NVCF
+  for (const [voice, locale] of [
+    [primaryVoice,  langConfig.locale],
+    [fallbackVoice, 'en-IN'          ],
+  ] as [string, string][]) {
     let apiKey = '';
     try {
       apiKey = acquireKey();
-      const safeText = opts.text.slice(0, 4000).replace(/[\x00-\x08\x0B-\x1F\x7F]/g, ' ');
-
-      // Riva SynthesizeSpeechRequest fields as JSON
-      // 30s timeout — NVCF can hang; don't let it block the worker for 300s
-      const res = await fetch(`${NVCF_URL}/${fnId}`, {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          text:           safeText,
-          language_code:  langCode,
-          encoding:       'LINEAR_PCM',
-          sample_rate_hz: 22050,
-          voice_name:     voice,
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => `HTTP ${res.status}`);
-        reportFailure(apiKey, res.status);
-        throw new Error(`TTS NVCF HTTP ${res.status}: ${errText.slice(0, 200)}`);
-      }
-
-      // NVCF returns SynthesizeSpeechResponse: { audio: "<base64 WAV>" }
-      const json = await res.json();
-      const b64  = json.audio || json.audioContent || '';
-      if (!b64) throw new Error('NVCF TTS returned no audio field in response');
-
-      reportSuccess(apiKey);
-      console.info(`[NIM TTS] \u2705 fnId: ${fnId} | voice: ${voice} | lang: ${langCode}`);
-      return { audioBase64: b64, model: MODELS.tts.primary, usedFallback: isFallback };
-
+      const b64 = await synthesiseMagpie(opts.text, locale, voice, apiKey);
+      return { audioBase64: b64, model: MODELS.tts.primary, usedFallback: true };
     } catch (e: any) {
-      console.error(`[NIM TTS] ${isFallback ? 'Fallback' : 'Primary'} voice failed: ${e.message}`);
+      console.error(`[Magpie TTS] ${voice} failed: ${e.message}`);
       if (apiKey) reportFailure(apiKey, 0);
-      if (!isFallback) continue;
     }
   }
 
-  throw new Error('All NVIDIA TTS methods failed.');
+  throw new Error('All TTS methods failed (Sarvam + Magpie).');
 }
 
 // ── Avatar — Audio2Face-3D ───────────────────────────────────────────────────
