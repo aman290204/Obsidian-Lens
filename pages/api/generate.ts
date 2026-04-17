@@ -116,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       llmPrimary: MODELS.llm.primary,
       llmFallback: MODELS.llm.fallback,
       ttsPrimary: MODELS.tts.primary,
-      ttsFallback: MODELS.tts.fallback,
+      ttsFnId:    MODELS.tts.primaryFnId,
       avatar: MODELS.avatar,
     },
     poolStatus: pool,

@@ -46,8 +46,9 @@ export const MODELS = {
   },
   tts: {
     primary:      process.env.NIM_TTS_PRIMARY     || 'magpie-tts-multilingual',
-    fallback:     process.env.NIM_TTS_FALLBACK    || 'nvidia/riva-tts', // Any other NIM model the user chooses
-    primaryFnId:  process.env.NIM_TTS_PRIMARY_FN_ID  || '',
+    // Magpie-Multilingual NVCF function ID — used for REST pexec calls
+    // Confirmed ID: 877104f7-e885-42b9-8de8-f6e4c6303969
+    primaryFnId:  process.env.NIM_TTS_PRIMARY_FN_ID  || '877104f7-e885-42b9-8de8-f6e4c6303969',
     fallbackFnId: process.env.NIM_TTS_FALLBACK_FN_ID || '',
   },
   avatar: process.env.NIM_AVATAR || 'audio2face-3d',
@@ -334,47 +335,64 @@ export interface TTSResult {
 }
 
 /**
- * Direct REST call to NVIDIA NIM TTS: POST /v1/audio/speech
- * Returns binary audio/wav, converted to base64.
- * Tries primary voice (locale-native) then EN-IN fallback.
- * No Python, no gRPC, no fnId required.
+ * Magpie-Multilingual TTS via NVCF pexec REST shim.
+ *
+ * gRPC is not available in Vercel serverless. Instead, NVIDIA exposes
+ * every NVCF function (including gRPC ones) through a REST gateway:
+ *   POST https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/<fnId>
+ *
+ * The request body mirrors the Riva SynthesizeSpeechRequest proto as JSON.
+ * The response body contains { "audio": "<base64 WAV>" }.
+ *
+ * Function ID (Magpie Multilingual): 877104f7-e885-42b9-8de8-f6e4c6303969
+ * Override via NIM_TTS_PRIMARY_FN_ID env var.
  */
 export async function synthesiseSpeech(opts: TTSOptions): Promise<TTSResult> {
   const langConfig    = LANGUAGE_CONFIG[opts.language] || LANGUAGE_CONFIG.english;
   const primaryVoice  = opts.voice ?? getMagpieVoice(opts.avatarId ?? 'maya', langConfig.locale);
   const fallbackVoice = getMagpieVoice(opts.avatarId ?? 'maya', 'en-IN');
+  const fnId          = MODELS.tts.primaryFnId;
 
-  for (const [voice, isFallback] of [
-    [primaryVoice,  false],
-    [fallbackVoice, true ],
-  ] as [string, boolean][]) {
+  if (!fnId) throw new Error('NIM_TTS_PRIMARY_FN_ID is not configured and no default is set.');
+
+  for (const [voice, langCode, isFallback] of [
+    [primaryVoice,  langConfig.locale, false],
+    [fallbackVoice, 'en-IN',           true ],
+  ] as [string, string, boolean][]) {
     let apiKey = '';
     try {
       apiKey = acquireKey();
       const safeText = opts.text.slice(0, 4000).replace(/[\x00-\x08\x0B-\x1F\x7F]/g, ' ');
 
-      const res = await fetch(`${BASE_URL}/audio/speech`, {
+      // Riva SynthesizeSpeechRequest fields as JSON
+      const res = await fetch(`${NVCF_URL}/${fnId}`, {
         method:  'POST',
         headers: {
           'Content-Type':  'application/json',
           'Authorization': `Bearer ${apiKey}`,
-          'Accept':        'audio/wav',
         },
-        body: JSON.stringify({ model: MODELS.tts.primary, input: safeText, voice }),
+        body: JSON.stringify({
+          text:           safeText,
+          language_code:  langCode,
+          encoding:       'LINEAR_PCM',
+          sample_rate_hz: 22050,
+          voice_name:     voice,
+        }),
       });
 
       if (!res.ok) {
         const errText = await res.text().catch(() => `HTTP ${res.status}`);
         reportFailure(apiKey, res.status);
-        throw new Error(`TTS HTTP ${res.status}: ${errText.slice(0, 200)}`);
+        throw new Error(`TTS NVCF HTTP ${res.status}: ${errText.slice(0, 200)}`);
       }
 
-      const buf = await res.arrayBuffer();
-      const b64 = Buffer.from(buf).toString('base64');
-      if (!b64) throw new Error('Empty audio buffer from TTS');
+      // NVCF returns SynthesizeSpeechResponse: { audio: "<base64 WAV>" }
+      const json = await res.json();
+      const b64  = json.audio || json.audioContent || '';
+      if (!b64) throw new Error('NVCF TTS returned no audio field in response');
 
       reportSuccess(apiKey);
-      console.info(`[NIM TTS] \u2705 voice: ${voice} | chars: ${safeText.length}`);
+      console.info(`[NIM TTS] \u2705 fnId: ${fnId} | voice: ${voice} | lang: ${langCode}`);
       return { audioBase64: b64, model: MODELS.tts.primary, usedFallback: isFallback };
 
     } catch (e: any) {

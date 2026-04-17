@@ -26,7 +26,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       },
       fallback: {
         llm:    MODELS.llm.fallback,
-        tts:    MODELS.tts.fallback,
+        tts:    MODELS.tts.primaryFnId,
         avatar: MODELS.avatar,
       },
     },
