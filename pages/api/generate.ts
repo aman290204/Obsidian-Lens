@@ -101,12 +101,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     poolStatus: pool,
   });
 
-  // ── Background pipeline ──────────────────────────────────────────────────
-  runPipeline({ jobId, prompt: prompt.trim(), language, durationMins, avatarId: avatar, totalChapters })
-    .catch(async err => {
-      console.error(`[Pipeline] Job ${jobId} fatal error:`, err?.message ?? err);
-      await setJobFailed(jobId, err?.message || 'Unknown pipeline error');
+  // ── Trigger async worker ──────────────────────────────────────────────────
+  // IMPORTANT: We do NOT run the pipeline here. Instead, we enqueue a job
+  // by calling the dedicated worker endpoint which can run in a separate
+  // Vercel function or background worker.
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+    await fetch(`${baseUrl}/api/worker`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    }).catch(err => {
+      // Worker might not be available in dev, fall back to local execution
+      console.warn('[Generate] Worker call failed, falling back to local execution:', err.message);
+      runPipeline({ jobId, prompt: prompt.trim(), language, durationMins, avatarId: avatar, totalChapters })
+        .catch(async (err: any) => {
+          console.error(`[Pipeline] Job ${jobId} fatal error:`, err?.message ?? err);
+          await setJobFailed(jobId, err?.message || 'Unknown pipeline error');
+        });
     });
+  } catch (err) {
+    console.error('[Generate] Failed to trigger worker:', err);
+  }
 }
 
 import { uploadVideoToDrive } from '../../src/lib/driveClient';
