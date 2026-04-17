@@ -5,8 +5,11 @@
   "installCommand": "npm install",
   "outputDirectory": ".next",
   "functions": {
-    "pages/api/**.ts": {
-      "maxDuration": 900
+    "pages/api/worker": {
+      "maxDuration": 300
+    },
+    "pages/api/generate": {
+      "maxDuration": 30
     }
   }
 }
