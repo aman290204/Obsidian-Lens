@@ -123,12 +123,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   // Trigger worker asynchronously (non-blocking)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://localhost:${process.env.PORT || 3000}`;
+  // Derive base URL from incoming request so it works on Vercel preview/prod/local
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host  = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`;
+
   fetch(`${baseUrl}/api/worker`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-token': process.env.WORKER_SECRET || 'obsidian-internal',
+    },
     body: JSON.stringify({ jobId }),
   }).catch(err => {
-    console.warn('[Generate] Worker trigger failed:', err.message);
+    console.warn('[Generate] Worker trigger failed:', err.message, '| baseUrl:', baseUrl);
   });
 }
